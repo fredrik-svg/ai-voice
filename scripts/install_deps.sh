@@ -19,8 +19,8 @@ fi
 # Activate virtual environment and install Python dependencies
 echo "Installing Python dependencies in virtual environment..."
 source venv/bin/activate
-pip install --upgrade pip
-pip install -r requirements.txt
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
 deactivate
 
 echo "Done. Next: configure WM8960 driver per HAT-guide, then set ALSA device in config.yaml (e.g., plughw:1,0)."
