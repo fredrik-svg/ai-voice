@@ -26,10 +26,12 @@ git clone <ditt-repo> voice-agent
 cd voice-agent
 cp config.example.yaml config.yaml
 
-# Installera paket och Python-deps
+# Installera paket och Python-deps (skapar automatiskt en virtuell miljö)
 chmod +x scripts/install_deps.sh
 ./scripts/install_deps.sh
 ```
+
+**OBS:** Skriptet skapar automatiskt en virtuell Python-miljö (`venv/`) för att undvika problem med "externally-managed-environment" i moderna Raspberry Pi OS-versioner (Bookworm).
 
 ### Aktivera WM8960 (ljudkort)
 Följ HAT‑leverantörens guide för WM8960/seeed‑voicecard på Bookworm.
@@ -82,7 +84,7 @@ playback:
 ```bash
 # Dev
 chmod +x scripts/run.sh
-./scripts/run.sh
+./scripts/run.sh   # Aktiverar automatiskt venv om den finns
 
 # Prod (systemd)
 sudo cp systemd/voice-agent.service /etc/systemd/system/
@@ -91,6 +93,8 @@ sudo systemctl enable voice-agent
 sudo systemctl start voice-agent
 sudo journalctl -u voice-agent -f
 ```
+
+**Tips:** Systemd-tjänsten använder automatiskt den virtuella miljön (`venv/bin/python3`) som skapades under installationen.
 
 ## Backend: exempel på TTS-svar
 Publicera en WAV (16 kHz, mono) som base64 till `tts`-topic:
