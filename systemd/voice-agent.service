@@ -7,7 +7,7 @@ Wants=network-online.target
 Type=simple
 User=pi
 WorkingDirectory=/home/pi/voice-agent
-ExecStart=/usr/bin/python3 -m src.agent config.yaml
+ExecStart=/home/pi/voice-agent/venv/bin/python3 -m src.agent config.yaml
 Restart=always
 RestartSec=3
 Environment=PYTHONUNBUFFERED=1
