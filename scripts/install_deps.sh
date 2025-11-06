@@ -8,7 +8,9 @@ if [ -f /boot/firmware/config.txt ] && ! grep -q '^dtparam=i2s=on' /boot/firmwar
 fi
 
 sudo apt-get update
-sudo apt-get install -y python3 python3-pip python3-dev python3-venv git alsa-utils sox libasound2-dev
+sudo apt-get install -y \
+  python3 python3-pip python3-dev python3-venv \
+  git alsa-utils sox libasound2-dev
 
 # Create virtual environment if it doesn't exist
 if [ ! -d "venv" ]; then
@@ -21,6 +23,6 @@ echo "Installing Python dependencies in virtual environment..."
 source venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
-deactivate
+deactivate || true
 
 echo "Done. Next: configure WM8960 driver per HAT-guide, then set ALSA device in config.yaml (e.g., plughw:1,0)."
