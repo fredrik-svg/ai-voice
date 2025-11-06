@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Enable I2S (requires reboot afterwards)
+if [ -f /boot/firmware/config.txt ] && ! grep -q '^dtparam=i2s=on' /boot/firmware/config.txt; then
+  echo 'dtparam=i2s=on' | sudo tee -a /boot/firmware/config.txt
+  echo "I2S enabled (dtparam=i2s=on). Reboot required for codec to appear."
+fi
+
+sudo apt-get update
+sudo apt-get install -y python3 python3-pip python3-dev git   alsa-utils sox libasound2-dev
+
+# Python deps
+pip3 install -r requirements.txt
+
+echo "Done. Next: configure WM8960 driver per HAT-guide, then set ALSA device in config.yaml (e.g., plughw:1,0)."

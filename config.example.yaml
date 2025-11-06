@@ -1,0 +1,43 @@
+# Device identity
+tenant: GENIO
+user: fredrik
+deviceId: voice-zero-2
+
+# MQTT broker (WebSocket not required here; using TLS MQTT)
+mqtt:
+  host: YOUR_MQTT_HOST          # e.g. broker.example.com
+  port: 8883                    # TLS MQTT port
+  username: YOUR_MQTT_USER
+  password: YOUR_MQTT_PASSWORD
+  tls: true                     # set false for lab-only
+  clientIdPrefix: voice-
+
+topics:
+  audio: "t/{tenant}/u/{user}/voice/{deviceId}/audio"
+  control: "t/{tenant}/u/{user}/voice/{deviceId}/control"
+  response: "t/{tenant}/u/{user}/voice/{deviceId}/response"
+  tts: "t/{tenant}/u/{user}/voice/{deviceId}/tts"
+
+# Audio capture
+audio:
+  rate: 16000                   # 16 kHz mono
+  channels: 1
+  format: S16_LE                # arecord format
+  device: "plughw:0,0"          # change to your WM8960 card, e.g. plughw:1,0
+  chunk_ms: 20                  # 20ms frames
+  vad_mode: 2                   # 0-3 (webrtcvad aggressiveness)
+  vad_silence_ms: 800           # stop after this much silence
+  mode: "ptt"                   # "ptt" (push-to-talk button) or "vad" (auto start on voice)
+
+# GPIO
+gpio:
+  button_pin: 17                # KEYESTUDIO ReSpeaker 2-Mic Pi HAT V1.0 uses GPIO17 for the button
+  pull_up: true
+
+# Playback
+playback:
+  device: "plughw:0,0"          # ALSA device for aplay (WM8960)
+  volume_pct: 90
+
+# Logging
+debug: false
