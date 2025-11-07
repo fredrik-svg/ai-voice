@@ -23,13 +23,17 @@ class Button:
             threading.Thread(target=self._simulate, daemon=True).start()
             return
         GPIO.setmode(GPIO.BCM)
-        GPIO.setup(self.pin, GPIO.IN)
+        # Configure internal pull resistor for reliable readings
+        pud = GPIO.PUD_UP if self.pull_up else GPIO.PUD_DOWN
+        GPIO.setup(self.pin, GPIO.IN, pull_up_down=pud)
         self._running = True
         self._thread = threading.Thread(target=self._poll, daemon=True)
         self._thread.start()
 
     def _poll(self):
         """Poll GPIO pin for button state changes."""
+        # Wait briefly to ensure stable initial reading
+        time.sleep(0.01)
         last_state = GPIO.input(self.pin)
         while self._running:
             state = GPIO.input(self.pin)
@@ -45,6 +49,12 @@ class Button:
                     elif not self.pull_up and state:  # Pull-down: press = HIGH
                         if self._pressed_cb:
                             self._pressed_cb()
+                    elif self.pull_up and state:  # Pull-up: release = HIGH
+                        if self._released_cb:
+                            self._released_cb()
+                    elif not self.pull_up and not state:  # Pull-down: release = LOW
+                        if self._released_cb:
+                            self._released_cb()
                     last_state = state
             time.sleep(0.01)  # Poll interval
 
