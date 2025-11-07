@@ -2,3 +2,4 @@ paho-mqtt==1.6.1
 webrtcvad==2.0.10
 PyYAML==6.0.2
 RPi.GPIO==0.7.1
+setuptools>=78.1.1
