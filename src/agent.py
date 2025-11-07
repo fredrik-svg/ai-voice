@@ -20,6 +20,7 @@ class VoiceAgent:
         self.running = True
         self.mode = cfg['audio'].get('mode', 'ptt')
         self.topics = cfg['topics']
+        self.button = None  # Store button reference for cleanup
         # Prepare topics
         for k in list(self.topics.keys()):
             t = self.topics[k].format(tenant=cfg['tenant'], user=cfg['user'], deviceId=cfg['deviceId'])
@@ -80,9 +81,9 @@ class VoiceAgent:
 
     def run_ptt(self):
         # Button press toggles a single capture window (press=record for N seconds, auto-stop with VAD silence)
-        btn = Button(self.cfg['gpio']['button_pin'], self.cfg['gpio'].get('pull_up', True))
-        btn.on_pressed(lambda: threading.Thread(target=self._capture_once, daemon=True).start())
-        btn.start()
+        self.button = Button(self.cfg['gpio']['button_pin'], self.cfg['gpio'].get('pull_up', True))
+        self.button.on_pressed(lambda: threading.Thread(target=self._capture_once, daemon=True).start())
+        self.button.start()
         print("[agent] PTT mode: press the HAT button to talk (or press Enter in console).")
         while self.running:
             time.sleep(0.2)
@@ -130,6 +131,9 @@ class VoiceAgent:
         self.running = False
         try: self.streamer.stop()
         except Exception: pass
+        if self.button:
+            try: self.button.stop()
+            except Exception: pass
         self.publish_control({'status':'offline'})
 
 def main():

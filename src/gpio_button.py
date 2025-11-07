@@ -24,12 +24,26 @@ class Button:
         pud = GPIO.PUD_UP if self.pull_up else GPIO.PUD_DOWN
         GPIO.setup(self.pin, GPIO.IN, pull_up_down=pud)
         edge = GPIO.FALLING if self.pull_up else GPIO.RISING
+        # Remove any existing event detection before adding new one
+        try:
+            GPIO.remove_event_detect(self.pin)
+        except Exception:
+            pass  # Ignore if no event detection exists
         GPIO.add_event_detect(self.pin, edge, callback=self._edge, bouncetime=50)
 
     def _edge(self, channel):
         # Simple toggle: press triggers pressed; release not detected without state tracking.
         if self._pressed_cb:
             self._pressed_cb()
+
+    def stop(self):
+        """Clean up GPIO resources."""
+        if GPIO is not None:
+            try:
+                GPIO.remove_event_detect(self.pin)
+                GPIO.cleanup(self.pin)
+            except Exception:
+                pass  # Ignore cleanup errors
 
     def _simulate(self):
         while True:
