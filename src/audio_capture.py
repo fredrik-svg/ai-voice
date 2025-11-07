@@ -5,6 +5,9 @@ with warnings.catch_warnings():
     warnings.filterwarnings("ignore", category=UserWarning, message=".*pkg_resources.*")
     import webrtcvad
 
+# Constants
+PROCESS_START_CHECK_DELAY = 0.1  # seconds to wait before checking if arecord started successfully
+
 class AudioStreamer:
     def __init__(self, cfg):
         self.cfg = cfg
@@ -29,7 +32,14 @@ class AudioStreamer:
         ]
 
     def validate_device(self):
-        """Check if the audio device exists and is accessible."""
+        """Check if audio capture devices are available.
+        
+        This is a best-effort check to provide early feedback. The definitive
+        validation happens when arecord actually attempts to open the device.
+        
+        Returns:
+            bool: True if audio devices appear to be available, False otherwise.
+        """
         try:
             # Try to list ALSA devices
             result = subprocess.run(['arecord', '-l'], capture_output=True, text=True, timeout=5)
@@ -38,10 +48,9 @@ class AudioStreamer:
                 print(f"[WARNING] Error output: {result.stderr.strip()}", file=sys.stderr)
                 return False
             
-            # Check if the device appears in the list (basic check)
+            # Check if any capture devices are available (basic check)
             if 'card' not in result.stdout.lower():
-                print(f"[WARNING] No audio capture devices found. Device '{self.device}' does not exist.", file=sys.stderr)
-                print(f"[INFO] Available devices:\n{result.stdout}", file=sys.stderr)
+                print(f"[WARNING] No audio capture devices found.", file=sys.stderr)
                 return False
             
             return True
@@ -58,11 +67,11 @@ class AudioStreamer:
     def start(self):
         if self.running: return
         
-        # Validate device before attempting to start
+        # Validate device availability (best-effort check)
+        # Note: This provides early feedback but doesn't guarantee the specific
+        # device in config will work. The actual validation happens when arecord starts.
         if not self.validate_device():
-            print(f"[ERROR] Audio device '{self.device}' validation failed.", file=sys.stderr)
-            print(f"[INFO] Please check your config.yaml and ensure the audio device is correctly configured.", file=sys.stderr)
-            print(f"[INFO] Run 'arecord -l' to list available capture devices.", file=sys.stderr)
+            print(f"[WARNING] Audio device pre-check failed. Will attempt to start anyway...", file=sys.stderr)
         
         try:
             self.proc = subprocess.Popen(
@@ -73,7 +82,7 @@ class AudioStreamer:
             )
             
             # Give the process a moment to start, then check if it failed immediately
-            time.sleep(0.1)
+            time.sleep(PROCESS_START_CHECK_DELAY)
             poll_result = self.proc.poll()
             if poll_result is not None:
                 # Process has already exited - read the error
@@ -82,7 +91,8 @@ class AudioStreamer:
                 if stderr_output:
                     print(f"[ERROR] arecord output: {stderr_output}", file=sys.stderr)
                 if "audio open error" in stderr_output.lower():
-                    print(f"[ERROR] Failed to open audio device '{self.device}'. Please verify the device exists.", file=sys.stderr)
+                    print(f"[ERROR] Failed to open audio device '{self.device}'.", file=sys.stderr)
+                    print(f"[INFO] Please verify the device exists and is configured correctly in config.yaml.", file=sys.stderr)
                     print(f"[INFO] Run 'arecord -l' to list available capture devices.", file=sys.stderr)
                 raise RuntimeError(f"Failed to start audio capture: {stderr_output}")
             
