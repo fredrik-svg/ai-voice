@@ -1,5 +1,12 @@
-import subprocess, threading, collections, time
-import webrtcvad
+import subprocess, threading, collections, time, warnings, sys
+
+# Suppress the pkg_resources deprecation warning from webrtcvad
+with warnings.catch_warnings():
+    warnings.filterwarnings("ignore", category=UserWarning, message=".*pkg_resources.*")
+    import webrtcvad
+
+# Constants
+PROCESS_START_CHECK_DELAY = 0.1  # seconds to wait before checking if arecord started successfully
 
 class AudioStreamer:
     def __init__(self, cfg):
@@ -24,10 +31,78 @@ class AudioStreamer:
             '-t', 'raw'
         ]
 
+    def validate_device(self):
+        """Check if audio capture devices are available.
+        
+        This is a best-effort check to provide early feedback. The definitive
+        validation happens when arecord actually attempts to open the device.
+        
+        Returns:
+            bool: True if audio devices appear to be available, False otherwise.
+        """
+        try:
+            # Try to list ALSA devices
+            result = subprocess.run(['arecord', '-l'], capture_output=True, text=True, timeout=5)
+            if result.returncode != 0:
+                print(f"[WARNING] Unable to list audio devices. Device '{self.device}' may not exist.", file=sys.stderr)
+                print(f"[WARNING] Error output: {result.stderr.strip()}", file=sys.stderr)
+                return False
+            
+            # Check if any capture devices are available (basic check)
+            if 'card' not in result.stdout.lower():
+                print(f"[WARNING] No audio capture devices found.", file=sys.stderr)
+                return False
+            
+            return True
+        except FileNotFoundError:
+            print(f"[ERROR] arecord command not found. Please install alsa-utils.", file=sys.stderr)
+            return False
+        except subprocess.TimeoutExpired:
+            print(f"[WARNING] Timeout while checking audio devices.", file=sys.stderr)
+            return False
+        except Exception as e:
+            print(f"[WARNING] Error checking audio device: {e}", file=sys.stderr)
+            return False
+
     def start(self):
         if self.running: return
-        self.proc = subprocess.Popen(self._arecord_cmd(), stdout=subprocess.PIPE, bufsize=0)
-        self.running = True
+        
+        # Validate device availability (best-effort check)
+        # Note: This provides early feedback but doesn't guarantee the specific
+        # device in config will work. The actual validation happens when arecord starts.
+        if not self.validate_device():
+            print(f"[WARNING] Audio device pre-check failed. Will attempt to start anyway...", file=sys.stderr)
+        
+        try:
+            self.proc = subprocess.Popen(
+                self._arecord_cmd(),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                bufsize=0
+            )
+            
+            # Give the process a moment to start, then check if it failed immediately
+            time.sleep(PROCESS_START_CHECK_DELAY)
+            poll_result = self.proc.poll()
+            if poll_result is not None:
+                # Process has already exited - read the error
+                stderr_output = self.proc.stderr.read().decode('utf-8', errors='replace').strip()
+                print(f"[ERROR] arecord failed to start (exit code {poll_result})", file=sys.stderr)
+                if stderr_output:
+                    print(f"[ERROR] arecord output: {stderr_output}", file=sys.stderr)
+                if "audio open error" in stderr_output.lower():
+                    print(f"[ERROR] Failed to open audio device '{self.device}'.", file=sys.stderr)
+                    print(f"[INFO] Please verify the device exists and is configured correctly in config.yaml.", file=sys.stderr)
+                    print(f"[INFO] Run 'arecord -l' to list available capture devices.", file=sys.stderr)
+                raise RuntimeError(f"Failed to start audio capture: {stderr_output}")
+            
+            self.running = True
+        except FileNotFoundError:
+            print(f"[ERROR] arecord command not found. Please install alsa-utils.", file=sys.stderr)
+            raise
+        except Exception as e:
+            print(f"[ERROR] Failed to start audio capture: {e}", file=sys.stderr)
+            raise
 
     def stop(self):
         if not self.running: return
