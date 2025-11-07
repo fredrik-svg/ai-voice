@@ -6,7 +6,7 @@ class MqttClient:
     def __init__(self, cfg):
         self.cfg = cfg
         cid_prefix = cfg['mqtt'].get('clientIdPrefix', 'voice-')
-        self.client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=f"{cid_prefix}{id(self)}", clean_session=True)
+        self.client = mqtt.Client(client_id=f"{cid_prefix}{id(self)}", clean_session=True)
         self.client.username_pw_set(cfg['mqtt']['username'], cfg['mqtt']['password'])
         if cfg['mqtt'].get('tls', True):
             self.client.tls_set(cert_reqs=ssl.CERT_REQUIRED)
@@ -14,13 +14,13 @@ class MqttClient:
         self.client.on_disconnect = self._on_disconnect
         self._connected = threading.Event()
 
-    def _on_connect(self, client, userdata, flags, reason_code, properties):
-        if reason_code == 0:
+    def _on_connect(self, client, userdata, flags, rc):
+        if rc == 0:
             self._connected.set()
         else:
             self._connected.clear()
 
-    def _on_disconnect(self, client, userdata, reason_code, properties):
+    def _on_disconnect(self, client, userdata, rc):
         self._connected.clear()
 
     def connect(self):
