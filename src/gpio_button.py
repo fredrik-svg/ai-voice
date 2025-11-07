@@ -37,26 +37,22 @@ class Button:
         last_state = GPIO.input(self.pin)
         while self._running:
             state = GPIO.input(self.pin)
-            # Detect press: if pull_up=True, button pressed means LOW (False)
-            # if pull_up=False, button pressed means HIGH (True)
             if state != last_state:
                 time.sleep(0.05)  # Debounce delay
                 state = GPIO.input(self.pin)  # Re-read after debounce
                 if state != last_state:
-                    if self.pull_up and not state:  # Pull-up: press = LOW
-                        if self._pressed_cb:
-                            self._pressed_cb()
-                    elif not self.pull_up and state:  # Pull-down: press = HIGH
-                        if self._pressed_cb:
-                            self._pressed_cb()
-                    elif self.pull_up and state:  # Pull-up: release = HIGH
-                        if self._released_cb:
-                            self._released_cb()
-                    elif not self.pull_up and not state:  # Pull-down: release = LOW
-                        if self._released_cb:
-                            self._released_cb()
+                    # Determine if button is pressed based on pull configuration
+                    # Pull-up: pressed = LOW (False), released = HIGH (True)
+                    # Pull-down: pressed = HIGH (True), released = LOW (False)
+                    is_pressed = (not state if self.pull_up else state)
+                    
+                    if is_pressed and self._pressed_cb:
+                        self._pressed_cb()
+                    elif not is_pressed and self._released_cb:
+                        self._released_cb()
+                    
                     last_state = state
-            time.sleep(0.01)  # Poll interval
+            time.sleep(0.02)  # Poll interval (20ms for better power efficiency)
 
     def stop(self):
         """Clean up GPIO resources."""
