@@ -1,9 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Configuration for retry and timeout settings
+readonly MAX_RETRY_ATTEMPTS=5
+readonly PIP_RETRIES=5
+readonly PIP_TIMEOUT=60
+
 # Function to retry a command with exponential backoff
 retry_command() {
-  local max_attempts=5
+  local max_attempts=$MAX_RETRY_ATTEMPTS
   local timeout=1
   local attempt=1
   local exit_code=0
@@ -24,6 +29,9 @@ retry_command() {
       fi
     fi
   done
+  
+  # This line should never be reached, but provides a safe fallback
+  return $exit_code
 }
 
 # Enable I2S (requires reboot afterwards)
@@ -51,10 +59,10 @@ echo "Installing Python dependencies in virtual environment..."
 source venv/bin/activate
 
 echo "Upgrading pip..."
-retry_command python3 -m pip install --retries 5 --timeout 60 --upgrade pip
+retry_command python3 -m pip install --retries $PIP_RETRIES --timeout $PIP_TIMEOUT --upgrade pip
 
 echo "Installing dependencies from requirements.txt..."
-retry_command python3 -m pip install --retries 5 --timeout 60 -r requirements.txt
+retry_command python3 -m pip install --retries $PIP_RETRIES --timeout $PIP_TIMEOUT -r requirements.txt
 
 deactivate || true
 
