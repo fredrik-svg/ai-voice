@@ -19,7 +19,7 @@ def load_test_config():
     # Try to load from config.yaml
     if os.path.exists(config_path):
         try:
-            with open(config_path, 'r') as f:
+            with open(config_path, 'r', encoding='utf-8') as f:
                 cfg = yaml.safe_load(f)
             
             # Check if config has valid MQTT settings (not placeholders)

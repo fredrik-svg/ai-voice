@@ -18,7 +18,8 @@ echo ""
 # Check if config.yaml exists and determine broker type
 cd "$(dirname "$0")/.."
 if [ -f config.yaml ]; then
-    MQTT_HOST=$(grep -E "^\s*host:" config.yaml | awk '{print $2}' | tr -d '"' | tr -d "'")
+    # Use Python to parse YAML reliably
+    MQTT_HOST=$(python3 -c "import yaml; cfg=yaml.safe_load(open('config.yaml')); print(cfg.get('mqtt',{}).get('host',''))" 2>/dev/null || echo "")
     
     if [[ "$MQTT_HOST" == "localhost" ]] || [[ "$MQTT_HOST" == "127.0.0.1" ]]; then
         echo -e "${BLUE}Info: config.yaml använder localhost MQTT broker${NC}"
@@ -34,7 +35,7 @@ if [ -f config.yaml ]; then
             fi
             echo ""
         fi
-    elif [[ "$MQTT_HOST" == YOUR_* ]]; then
+    elif [[ "$MQTT_HOST" == YOUR_* ]] || [[ -z "$MQTT_HOST" ]]; then
         echo -e "${YELLOW}Varning: config.yaml har inte konfigurerats med riktig MQTT broker.${NC}"
         echo -e "${YELLOW}Testerna kommer använda localhost som standard.${NC}"
         echo ""
