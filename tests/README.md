@@ -35,12 +35,27 @@ mosquitto -c /opt/homebrew/etc/mosquitto/mosquitto.conf  # macOS
 ```
 
 2. Kör testerna:
+
+**Med Python wrapper (rekommenderat):**
+```bash
+cd /path/to/ai-voice
+python tests/run_tests.py
+```
+
+**Eller med bash script:**
+```bash
+cd /path/to/ai-voice
+./tests/run_tests.sh
+# eller: bash tests/run_tests.sh
+```
+
+**Direkt med unittest:**
 ```bash
 cd /path/to/ai-voice
 PYTHONPATH=. python3 tests/test_mqtt_client.py
 ```
 
-Eller med pytest:
+**Eller med pytest:**
 ```bash
 pip install pytest
 PYTHONPATH=. pytest tests/test_mqtt_client.py -v
