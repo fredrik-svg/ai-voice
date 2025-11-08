@@ -54,7 +54,7 @@ user: fredrik
 deviceId: voice-zero-2
 
 mqtt:
-  host: broker.example.com
+  host: YOUR_HIVEMQ_CLOUD_HOST.hivemq.cloud  # t.ex. abc123.s1.eu.hivemq.cloud för HiveMQ Cloud
   port: 8883
   username: voice-user
   password: s3cret
@@ -67,7 +67,7 @@ topics:
   tts: "t/{tenant}/u/{user}/voice/{deviceId}/tts"
 
 audio:
-  device: "plughw:1,0"
+  device: "plughw:1,0"  # För seeed-2mic-voicecard (WM8960), använd card 1
   rate: 16000
   chunk_ms: 20
   vad_mode: 2
@@ -79,9 +79,49 @@ gpio:
   pull_up: true
 
 playback:
-  device: "plughw:1,0"
+  device: "plughw:1,0"  # Samma som audio device
   volume_pct: 90
 ```
+
+### HiveMQ Cloud Konfiguration
+Om du använder HiveMQ Cloud:
+1. Skapa ett kluster på [HiveMQ Cloud](https://www.hivemq.com/mqtt-cloud-broker/)
+2. Kopiera kluster-URL:en (t.ex. `abc123.s1.eu.hivemq.cloud`) till `mqtt.host`
+3. Använd port `8883` för TLS-krypterad MQTT
+4. Sätt `tls: true` för säker anslutning
+5. Konfigurera användarnamn och lösenord från HiveMQ Cloud-kontrollpanelen
+
+### Ljudkort Konfiguration
+För att hitta rätt ljudkortsinställning, kör:
+```bash
+arecord -l
+```
+
+Exempel på output för seeed-2mic-voicecard (WM8960):
+```
+card 1: seeed2micvoicec [seeed-2mic-voicecard], device 0: bcm2835-i2s-wm8960-hifi wm8960-hifi-0 [...]
+```
+
+Använd sedan `plughw:1,0` i config.yaml (där `1` är card-numret och `0` är device-numret).
+
+## Testning
+Systemet inkluderar MQTT-tester för att verifiera anslutningen:
+
+```bash
+# Kör MQTT-tester
+chmod +x tests/run_tests.sh
+./tests/run_tests.sh
+```
+
+### Test mot HiveMQ Cloud
+Testerna läser automatiskt från `config.yaml`:
+- Om `config.yaml` har en giltig MQTT-broker (inte `YOUR_*` placeholder), används den för testning
+- Om `config.yaml` inte finns eller har placeholders, används localhost (kräver Mosquitto)
+
+För att testa mot HiveMQ Cloud:
+1. Konfigurera `config.yaml` med dina HiveMQ Cloud-inställningar
+2. Kör `./tests/run_tests.sh`
+3. Testerna kommer ansluta till din HiveMQ Cloud-broker och verifiera funktionaliteten
 
 ## Kör
 ```bash

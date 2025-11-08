@@ -12,10 +12,48 @@ import yaml
 from src.mqtt_client import MqttClient
 
 
+def load_test_config():
+    """Load test configuration from config.yaml if available, otherwise use localhost"""
+    config_path = os.path.join(os.path.dirname(__file__), '..', 'config.yaml')
+    
+    # Try to load from config.yaml
+    if os.path.exists(config_path):
+        try:
+            with open(config_path, 'r', encoding='utf-8') as f:
+                cfg = yaml.safe_load(f)
+            
+            # Check if config has valid MQTT settings (not placeholders)
+            mqtt_host = cfg.get('mqtt', {}).get('host', '')
+            if mqtt_host and not mqtt_host.startswith('YOUR_'):
+                # Use config.yaml settings for testing against real broker
+                print(f"\n[INFO] Using MQTT broker from config.yaml: {mqtt_host}")
+                return cfg
+        except Exception as e:
+            print(f"\n[WARNING] Failed to load config.yaml: {e}")
+    
+    # Fall back to localhost for local testing
+    print("\n[INFO] Using localhost MQTT broker for testing")
+    return {
+        'tenant': 'test',
+        'user': 'testuser',
+        'deviceId': 'test-device',
+        'mqtt': {
+            'host': 'localhost',  # Local Mosquitto broker
+            'port': 1883,  # Non-TLS port for testing
+            'username': '',  # Local broker doesn't require auth
+            'password': '',
+            'tls': False,  # Disable TLS for local test broker
+            'clientIdPrefix': 'test-voice-'
+        }
+    }
+
+
 class TestMqttClient(unittest.TestCase):
     """Test MQTT client send and receive functionality"""
 
     def setUp(self):
+        """Set up test configuration from config.yaml or localhost"""
+        self.cfg = load_test_config()
         """Set up test configuration from config.yaml"""
         # Load configuration from config.yaml
         config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'config.yaml')
