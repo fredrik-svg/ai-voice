@@ -7,6 +7,8 @@ import unittest
 import json
 import time
 import threading
+import os
+import yaml
 from src.mqtt_client import MqttClient
 
 
@@ -14,20 +16,21 @@ class TestMqttClient(unittest.TestCase):
     """Test MQTT client send and receive functionality"""
 
     def setUp(self):
-        """Set up test configuration using local MQTT broker"""
-        self.cfg = {
-            'tenant': 'test',
-            'user': 'testuser',
-            'deviceId': 'test-device',
-            'mqtt': {
-                'host': 'localhost',  # Local Mosquitto broker
-                'port': 1883,  # Non-TLS port for testing
-                'username': '',  # Local broker doesn't require auth
-                'password': '',
-                'tls': False,  # Disable TLS for local test broker
-                'clientIdPrefix': 'test-voice-'
-            }
-        }
+        """Set up test configuration from config.yaml"""
+        # Load configuration from config.yaml
+        config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'config.yaml')
+        if not os.path.exists(config_path):
+            raise FileNotFoundError(
+                f"config.yaml not found at {config_path}. "
+                "Please copy config.example.yaml to config.yaml and configure MQTT settings."
+            )
+        
+        with open(config_path, 'r') as f:
+            self.cfg = yaml.safe_load(f)
+        
+        # Use test-specific device ID to avoid conflicts
+        self.cfg['deviceId'] = f"test-device-{int(time.time())}"
+        
         self.test_topic = f"test/ai-voice/{int(time.time())}"
         self.received_messages = []
         self.message_received_event = threading.Event()

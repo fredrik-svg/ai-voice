@@ -6,7 +6,6 @@ Wrapper script that can be executed with: python run_tests.py
 import sys
 import os
 import subprocess
-import shutil
 
 # ANSI color codes
 GREEN = '\033[0;32m'
@@ -20,54 +19,33 @@ def print_colored(message, color=GREEN):
     print(f"{color}{message}{NC}")
 
 
-def check_mosquitto():
-    """Check if Mosquitto is running"""
-    try:
-        result = subprocess.run(
-            ['pgrep', '-x', 'mosquitto'],
-            capture_output=True,
-            text=True
-        )
-        return result.returncode == 0
-    except FileNotFoundError:
-        # pgrep not available on this system
-        return True  # Assume it's running
-
-
-def start_mosquitto():
-    """Try to start Mosquitto if it's not running"""
-    print_colored("Varning: Mosquitto verkar inte köra.", YELLOW)
-    print_colored("Försöker starta Mosquitto...", YELLOW)
+def check_config_file():
+    """Check if config.yaml exists"""
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    repo_root = os.path.dirname(script_dir)
+    config_path = os.path.join(repo_root, 'config.yaml')
     
-    if shutil.which('systemctl'):
-        try:
-            subprocess.run(
-                ['sudo', 'systemctl', 'start', 'mosquitto'],
-                check=False
-            )
-        except Exception:
-            print_colored(
-                "Kunde inte starta Mosquitto automatiskt. Starta det manuellt.",
-                YELLOW
-            )
-    else:
-        print_colored(
-            "Starta Mosquitto manuellt innan testerna körs.",
-            YELLOW
-        )
-    print()
+    if not os.path.exists(config_path):
+        print_colored("=" * 66, YELLOW)
+        print_colored("Varning: config.yaml saknas!", YELLOW)
+        print_colored("Skapa config.yaml från config.example.yaml och konfigurera MQTT-inställningar.", YELLOW)
+        print_colored("=" * 66, YELLOW)
+        print()
+        return False
+    return True
 
 
 def main():
     """Main function to run the tests"""
     print_colored("=" * 66)
-    print_colored("Kör MQTT-tester (Running MQTT tests)")
+    print_colored("Kör MQTT-tester mot HiveMQ Cloud (Running MQTT tests against HiveMQ Cloud)")
     print_colored("=" * 66)
     print()
     
-    # Check if Mosquitto is running
-    if not check_mosquitto():
-        start_mosquitto()
+    # Check if config.yaml exists
+    if not check_config_file():
+        print_colored("Testerna kräver config.yaml med MQTT-inställningar.", RED)
+        return 1
     
     # Change to the repository root directory
     script_dir = os.path.dirname(os.path.abspath(__file__))
