@@ -85,12 +85,15 @@ class TestMqttClient(unittest.TestCase):
     def test_mqtt_connect(self):
         """Test: Anslutning till MQTT-broker ska fungera"""
         self.client = MqttClient(self.cfg)
+        mqtt_host = self.cfg['mqtt']['host']
+        mqtt_port = self.cfg['mqtt']['port']
+        print(f"\n[Test] Ansluter till MQTT broker: {mqtt_host}:{mqtt_port}")
         self.client.connect()
         
         # Verify connection
         self.assertTrue(self.client._connected.is_set(), 
                        "Kunde inte ansluta till MQTT-broker")
-        print("✓ Anslutning till MQTT-broker fungerar")
+        print(f"✓ Anslutning till MQTT-broker {mqtt_host}:{mqtt_port} fungerar")
 
     def test_mqtt_publish_and_subscribe(self):
         """Test: Skicka och ta emot meddelanden via MQTT"""
@@ -108,11 +111,13 @@ class TestMqttClient(unittest.TestCase):
             self.message_received_event.set()
         
         # Subscribe to test topic
+        print(f"\n[Test] Prenumererar på topic: {self.test_topic}")
         self.client.subscribe(self.test_topic, qos=1, on_message=on_message)
         time.sleep(1)  # Allow subscription to complete
         
         # Publish a test message
         test_payload = "Hej från MQTT test!"
+        print(f"[Test] Publicerar till topic: {self.test_topic}")
         self.client.client.publish(self.test_topic, test_payload, qos=1)
         
         # Wait for message to be received
@@ -125,8 +130,8 @@ class TestMqttClient(unittest.TestCase):
         self.assertEqual(self.received_messages[0], test_payload,
                         "Mottaget meddelande matchar inte skickat meddelande")
         
-        print(f"✓ Skickade meddelande: '{test_payload}'")
-        print(f"✓ Mottog meddelande: '{self.received_messages[0]}'")
+        print(f"✓ Skickade meddelande till '{self.test_topic}': '{test_payload}'")
+        print(f"✓ Mottog meddelande från '{self.test_topic}': '{self.received_messages[0]}'")
         print("✓ Skicka och ta emot meddelanden fungerar")
 
     def test_mqtt_publish_json(self):
@@ -145,7 +150,9 @@ class TestMqttClient(unittest.TestCase):
             self.message_received_event.set()
         
         # Subscribe to test topic
-        self.client.subscribe(self.test_topic + "/json", qos=1, 
+        json_topic = self.test_topic + "/json"
+        print(f"\n[Test] Prenumererar på topic: {json_topic}")
+        self.client.subscribe(json_topic, qos=1, 
                             on_message=on_json_message)
         time.sleep(1)  # Allow subscription to complete
         
@@ -158,7 +165,8 @@ class TestMqttClient(unittest.TestCase):
                 'status': 'ok'
             }
         }
-        self.client.publish_json(self.test_topic + "/json", test_json, qos=1)
+        print(f"[Test] Publicerar JSON till topic: {json_topic}")
+        self.client.publish_json(json_topic, test_json, qos=1)
         
         # Wait for message to be received
         received = self.message_received_event.wait(timeout=5)
@@ -172,9 +180,8 @@ class TestMqttClient(unittest.TestCase):
                         "JSON-meddelande matchar inte")
         self.assertEqual(received_json['data']['value'], 42,
                         "JSON-data matchar inte")
-        
-        print(f"✓ Skickade JSON: {test_json}")
-        print(f"✓ Mottog JSON: {received_json}")
+        print(f"✓ Skickade JSON till '{json_topic}': {test_json}")
+        print(f"✓ Mottog JSON från '{json_topic}': {received_json}")
         print("✓ JSON-meddelanden fungerar korrekt")
 
     def test_mqtt_multiple_messages(self):
@@ -195,14 +202,17 @@ class TestMqttClient(unittest.TestCase):
             received_count.release()
         
         # Subscribe to test topic
-        self.client.subscribe(self.test_topic + "/multi", qos=1, 
+        multi_topic = self.test_topic + "/multi"
+        print(f"\n[Test] Prenumererar på topic: {multi_topic}")
+        self.client.subscribe(multi_topic, qos=1, 
                             on_message=on_message)
         time.sleep(1)  # Allow subscription to complete
         
         # Publish multiple messages
+        print(f"[Test] Publicerar {message_count} meddelanden till topic: {multi_topic}")
         for i in range(message_count):
             message = f"Meddelande {i+1}"
-            self.client.client.publish(self.test_topic + "/multi", 
+            self.client.client.publish(multi_topic, 
                                      message, qos=1)
             time.sleep(0.1)  # Small delay between messages
         
@@ -216,8 +226,8 @@ class TestMqttClient(unittest.TestCase):
         self.assertEqual(len(self.received_messages), message_count,
                         f"Förväntade {message_count} meddelanden, fick {len(self.received_messages)}")
         
-        print(f"✓ Skickade {message_count} meddelanden")
-        print(f"✓ Mottog {len(self.received_messages)} meddelanden")
+        print(f"✓ Skickade {message_count} meddelanden till '{multi_topic}'")
+        print(f"✓ Mottog {len(self.received_messages)} meddelanden från '{multi_topic}'")
         print("✓ Flera meddelanden i följd fungerar")
 
 
