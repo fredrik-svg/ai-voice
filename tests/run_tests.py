@@ -2,6 +2,7 @@
 """
 Script to run MQTT tests
 Wrapper script that can be executed with: python run_tests.py
+This script ensures tests run within the virtual environment if it exists.
 """
 import sys
 import os
@@ -17,6 +18,24 @@ NC = '\033[0m'  # No Color
 def print_colored(message, color=GREEN):
     """Print a colored message"""
     print(f"{color}{message}{NC}")
+
+
+def check_venv():
+    """Check if virtual environment exists and use it"""
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    repo_root = os.path.dirname(script_dir)
+    venv_python = os.path.join(repo_root, 'venv', 'bin', 'python3')
+    
+    # Check if we're already running in the venv
+    if hasattr(sys, 'real_prefix') or (hasattr(sys, 'base_prefix') and sys.base_prefix != sys.prefix):
+        # Already in a virtual environment
+        return None
+    
+    # Check if venv exists and we should use it
+    if os.path.exists(venv_python):
+        return venv_python
+    
+    return None
 
 
 def check_config_file():
@@ -37,6 +56,22 @@ def check_config_file():
 
 def main():
     """Main function to run the tests"""
+    # Change to the repository root directory first
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    repo_root = os.path.dirname(script_dir)
+    os.chdir(repo_root)
+    
+    # Check if we should use venv Python
+    venv_python = check_venv()
+    if venv_python:
+        print_colored(f"Använder virtuell miljö: {venv_python}", GREEN)
+        # Re-run this script with the venv Python
+        result = subprocess.run(
+            [venv_python] + sys.argv,
+            check=False
+        )
+        return result.returncode
+    
     print_colored("=" * 66)
     print_colored("Kör MQTT-tester mot HiveMQ Cloud (Running MQTT tests against HiveMQ Cloud)")
     print_colored("=" * 66)
@@ -46,11 +81,6 @@ def main():
     if not check_config_file():
         print_colored("Testerna kräver config.yaml med MQTT-inställningar.", RED)
         return 1
-    
-    # Change to the repository root directory
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    repo_root = os.path.dirname(script_dir)
-    os.chdir(repo_root)
     
     # Set PYTHONPATH to include the repository root
     env = os.environ.copy()
