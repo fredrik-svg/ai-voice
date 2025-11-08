@@ -89,43 +89,55 @@ class VoiceAgent:
             time.sleep(0.2)
 
     def _capture_once(self):
+        """Capture audio once (PTT mode) with graceful error handling."""
         try:
             self._start_session()
             self.streamer.start()
             silence_ms = 0
-            for is_speech, frame in self.streamer.vad_stream():
-                if is_speech:
-                    silence_ms = 0
-                    self._publish_frame(frame)
-                else:
-                    silence_ms += self.cfg['audio']['chunk_ms']
-                    if silence_ms >= int(self.cfg['audio']['vad_silence_ms']):
-                        break
-            self.streamer.stop()
+            try:
+                for is_speech, frame in self.streamer.vad_stream():
+                    if is_speech:
+                        silence_ms = 0
+                        self._publish_frame(frame)
+                    else:
+                        silence_ms += self.cfg['audio']['chunk_ms']
+                        if silence_ms >= int(self.cfg['audio']['vad_silence_ms']):
+                            break
+            finally:
+                self.streamer.stop()
+        except Exception as e:
+            print(f"[ERROR] Audio capture failed: {e}", file=sys.stderr)
         finally:
             self._end_session()
 
     def run_vad(self):
+        """Run in VAD mode with graceful error handling."""
         print("[agent] VAD mode: auto start on voice, stop after silence.")
-        self.streamer.start()
-        in_session = False
-        silence_ms = 0
         try:
-            for is_speech, frame in self.streamer.vad_stream():
-                if is_speech and not in_session:
-                    in_session = True
-                    self._start_session()
-                    silence_ms = 0
+            self.streamer.start()
+            in_session = False
+            silence_ms = 0
+            try:
+                for is_speech, frame in self.streamer.vad_stream():
+                    if is_speech and not in_session:
+                        in_session = True
+                        self._start_session()
+                        silence_ms = 0
+                    if in_session:
+                        self._publish_frame(frame)
+                        silence_ms = 0 if is_speech else (silence_ms + self.cfg['audio']['chunk_ms'])
+                        if silence_ms >= int(self.cfg['audio']['vad_silence_ms']):
+                            self._end_session()
+                            in_session = False
+            finally:
+                self.streamer.stop()
                 if in_session:
-                    self._publish_frame(frame)
-                    silence_ms = 0 if is_speech else (silence_ms + self.cfg['audio']['chunk_ms'])
-                    if silence_ms >= int(self.cfg['audio']['vad_silence_ms']):
-                        self._end_session()
-                        in_session = False
-        finally:
-            self.streamer.stop()
-            if in_session:
-                self._end_session()
+                    self._end_session()
+        except Exception as e:
+            print(f"[ERROR] Audio capture failed: {e}", file=sys.stderr)
+            print(f"[ERROR] VAD mode cannot continue without audio device. Exiting.", file=sys.stderr)
+            self.stop()
+            sys.exit(1)
 
     def stop(self):
         self.running = False
