@@ -21,7 +21,7 @@ topics:
 # Audio capture
 audio:
   rate: 16000                   # 16 kHz mono
-  channels: 1
+  channels: 1                   # Output format (mono). Hardware records in stereo, converted automatically.
   format: S16_LE                # arecord format
   device: "plughw:0,0"          # change to your WM8960 card, e.g. plughw:1,0
   chunk_ms: 20                  # 20ms frames
