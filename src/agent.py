@@ -89,6 +89,7 @@ class VoiceAgent:
             time.sleep(0.2)
 
     def _capture_once(self):
+        """Capture audio once (PTT mode) with graceful error handling."""
         try:
             self._start_session()
             self.streamer.start()
@@ -110,6 +111,7 @@ class VoiceAgent:
             self._end_session()
 
     def run_vad(self):
+        """Run in VAD mode with graceful error handling."""
         print("[agent] VAD mode: auto start on voice, stop after silence.")
         try:
             self.streamer.start()
