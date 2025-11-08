@@ -54,6 +54,21 @@ class TestMqttClient(unittest.TestCase):
     def setUp(self):
         """Set up test configuration from config.yaml or localhost"""
         self.cfg = load_test_config()
+        """Set up test configuration from config.yaml"""
+        # Load configuration from config.yaml
+        config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'config.yaml')
+        if not os.path.exists(config_path):
+            raise FileNotFoundError(
+                f"config.yaml not found at {config_path}. "
+                "Please copy config.example.yaml to config.yaml and configure MQTT settings."
+            )
+        
+        with open(config_path, 'r') as f:
+            self.cfg = yaml.safe_load(f)
+        
+        # Use test-specific device ID to avoid conflicts
+        self.cfg['deviceId'] = f"test-device-{int(time.time())}"
+        
         self.test_topic = f"test/ai-voice/{int(time.time())}"
         self.received_messages = []
         self.message_received_event = threading.Event()
