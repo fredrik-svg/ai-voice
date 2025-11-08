@@ -38,10 +38,13 @@ Följ HAT‑leverantörens guide för WM8960/seeed‑voicecard på Bookworm.
 Testa sedan att spela in/upp:
 ```bash
 arecord -l                # se kort-id
-arecord -D plughw:1,0 -f S16_LE -r 16000 -d 3 test.wav
+# WM8960 kräver stereo (2 kanaler) inspelning
+arecord -D plughw:1,0 -c 2 -f S16_LE -r 16000 -d 3 test.wav
 aplay   -D plughw:1,0 test.wav
 ```
 Ställ in ditt `device` i `config.yaml` (t.ex. `plughw:1,0`).
+
+**OBS:** WM8960-kodeken kräver stereoinspelning (2 kanaler). Programmet hanterar automatiskt konvertering från stereo till mono via sox.
 
 ## Konfiguration
 Redigera `config.yaml`:

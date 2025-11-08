@@ -17,19 +17,49 @@ class AudioStreamer:
         self.device = cfg['audio']['device']
         self.format = cfg['audio']['format']
         self.proc = None
+        self.arecord_proc = None
         self.vad = webrtcvad.Vad(int(cfg['audio']['vad_mode']))
         self.running = False
 
+
     def _arecord_cmd(self):
-        return [
+        # WM8960 codec requires 2-channel (stereo) capture
+        # We record in stereo and convert to mono using sox
+        # to maintain compatibility with downstream mono processing
+        arecord_part = [
             'arecord',
             '-q',
             '-D', self.device,
-            '-c', str(self.cfg['audio']['channels']),
+            '-c', '2',  # Record in stereo (hardware requirement)
             '-f', self.format,
             '-r', str(self.rate),
             '-t', 'raw'
         ]
+        
+        # Convert stereo to mono using sox
+        # -t raw: raw PCM format
+        # -e signed-integer: signed integer samples
+        # -b 16: 16-bit samples
+        # -c 2: input is stereo
+        # -r rate: sample rate
+        # channels 1: output mono (averages the two channels)
+        sox_part = [
+            'sox',
+            '-t', 'raw',
+            '-e', 'signed-integer',
+            '-b', '16',
+            '-c', '2',
+            '-r', str(self.rate),
+            '-',  # read from stdin
+            '-t', 'raw',
+            '-e', 'signed-integer', 
+            '-b', '16',
+            '-c', '1',  # output mono
+            '-r', str(self.rate),
+            '-'  # write to stdout
+        ]
+        
+        return arecord_part, sox_part
 
     def validate_device(self):
         """Check if audio capture devices are available.
@@ -74,20 +104,40 @@ class AudioStreamer:
             print(f"[WARNING] Audio device pre-check failed. Will attempt to start anyway...", file=sys.stderr)
         
         try:
-            self.proc = subprocess.Popen(
-                self._arecord_cmd(),
+            # Create a pipeline: arecord (stereo) | sox (stereo->mono conversion)
+            arecord_cmd, sox_cmd = self._arecord_cmd()
+            
+            # Start arecord process
+            arecord_proc = subprocess.Popen(
+                arecord_cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 bufsize=0
             )
             
-            # Give the process a moment to start, then check if it failed immediately
+            # Start sox process, reading from arecord's stdout
+            self.proc = subprocess.Popen(
+                sox_cmd,
+                stdin=arecord_proc.stdout,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                bufsize=0
+            )
+            
+            # Allow arecord to receive SIGPIPE if sox exits
+            arecord_proc.stdout.close()
+            
+            # Store arecord process for cleanup
+            self.arecord_proc = arecord_proc
+            
+            # Give the processes a moment to start, then check if they failed immediately
             time.sleep(PROCESS_START_CHECK_DELAY)
-            poll_result = self.proc.poll()
-            if poll_result is not None:
-                # Process has already exited - read the error
-                stderr_output = self.proc.stderr.read().decode('utf-8', errors='replace').strip()
-                print(f"[ERROR] arecord failed to start (exit code {poll_result})", file=sys.stderr)
+            
+            # Check if arecord failed
+            arecord_poll = arecord_proc.poll()
+            if arecord_poll is not None:
+                stderr_output = arecord_proc.stderr.read().decode('utf-8', errors='replace').strip()
+                print(f"[ERROR] arecord failed to start (exit code {arecord_poll})", file=sys.stderr)
                 if stderr_output:
                     print(f"[ERROR] arecord output: {stderr_output}", file=sys.stderr)
                 if "audio open error" in stderr_output.lower():
@@ -96,9 +146,23 @@ class AudioStreamer:
                     print(f"[INFO] Run 'arecord -l' to list available capture devices.", file=sys.stderr)
                 raise RuntimeError(f"Failed to start audio capture: {stderr_output}")
             
+            # Check if sox failed
+            sox_poll = self.proc.poll()
+            if sox_poll is not None:
+                stderr_output = self.proc.stderr.read().decode('utf-8', errors='replace').strip()
+                print(f"[ERROR] sox failed to start (exit code {sox_poll})", file=sys.stderr)
+                if stderr_output:
+                    print(f"[ERROR] sox output: {stderr_output}", file=sys.stderr)
+                raise RuntimeError(f"Failed to start audio conversion: {stderr_output}")
+            
             self.running = True
-        except FileNotFoundError:
-            print(f"[ERROR] arecord command not found. Please install alsa-utils.", file=sys.stderr)
+        except FileNotFoundError as e:
+            if 'arecord' in str(e):
+                print(f"[ERROR] arecord command not found. Please install alsa-utils.", file=sys.stderr)
+            elif 'sox' in str(e):
+                print(f"[ERROR] sox command not found. Please install sox.", file=sys.stderr)
+            else:
+                print(f"[ERROR] Command not found: {e}", file=sys.stderr)
             raise
         except Exception as e:
             print(f"[ERROR] Failed to start audio capture: {e}", file=sys.stderr)
@@ -106,11 +170,22 @@ class AudioStreamer:
 
     def stop(self):
         if not self.running: return
-        self.proc.terminate()
-        try:
-            self.proc.wait(timeout=2)
-        except Exception:
-            self.proc.kill()
+        
+        # Terminate both sox and arecord processes
+        if self.proc:
+            self.proc.terminate()
+            try:
+                self.proc.wait(timeout=2)
+            except Exception:
+                self.proc.kill()
+        
+        if hasattr(self, 'arecord_proc') and self.arecord_proc:
+            self.arecord_proc.terminate()
+            try:
+                self.arecord_proc.wait(timeout=2)
+            except Exception:
+                self.arecord_proc.kill()
+        
         self.running = False
 
     def frames(self):
