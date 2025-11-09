@@ -2,6 +2,26 @@
 
 Denna guide förklarar hur man konfigurerar ett n8n-flöde för att ta emot och svara på röstmeddelanden från AI Voice-agenten via MQTT.
 
+## Snabbstart
+
+**Fråga:** Hur vet n8n vilket topic den ska svara på?
+
+**Svar:** n8n extraherar `tenant`, `user` och `deviceId` från det inkommande MQTT-topic och bygger sedan dynamiska svar-topics:
+
+```javascript
+// Från inkommande topic: t/GENIO/u/fredrik/voice/voice-zero-2/audio
+const parts = topic.split('/');
+const tenant = parts[1];    // GENIO
+const user = parts[3];       // fredrik
+const deviceId = parts[5];   // voice-zero-2
+
+// Bygg svar-topics
+const responseTopic = `t/${tenant}/u/${user}/voice/${deviceId}/response`;
+const ttsTopic = `t/${tenant}/u/${user}/voice/${deviceId}/tts`;
+```
+
+Se [Steg 2: Extrahera Topic-information](#steg-2-extrahera-topic-information) för fullständigt exempel.
+
 ## Översikt
 
 AI Voice-agenten kommunicerar via MQTT med fyra olika topic-typer:
@@ -12,6 +32,52 @@ AI Voice-agenten kommunicerar via MQTT med fyra olika topic-typer:
 | `control` | Device → n8n | 1 | Statusmeddelanden och händelser |
 | `response` | n8n → Device | 1 | Textmeddelanden/svar till enheten |
 | `tts` | n8n → Device | 1 | TTS-ljud (WAV base64) för uppspelning |
+
+### Meddelandeflöde
+
+```
+Röst-Agent (Device)                MQTT Broker              n8n Backend
+─────────────────────              ───────────              ────────────
+       │                                │                         │
+       │ 1. CONNECT                     │                         │
+       ├───────────────────────────────>│                         │
+       │                                │                         │
+       │ 2. SUBSCRIBE (response, tts)   │                         │
+       ├───────────────────────────────>│                         │
+       │                                │                         │
+       │ 3. PUBLISH (control: online)   │                         │
+       ├───────────────────────────────>│                         │
+       │                                │                         │
+   [Användare trycker på knapp]        │                         │
+       │                                │                         │
+       │ 4. PUBLISH (control: audio_start)                        │
+       ├───────────────────────────────>│                         │
+       │                                ├────────────────────────>│
+       │                                │  5. Extract topic info  │
+       │                                │         (tenant, user,  │
+       │                                │          deviceId)      │
+       │                                │                         │
+       │ 6. PUBLISH (audio frames...)   │                         │
+       ├───────────────────────────────>│                         │
+       │    20ms PCM chunks              ├────────────────────────>│
+       │                                │  7. Accumulate frames   │
+       │                                │                         │
+       │ 8. PUBLISH (control: audio_end)│                         │
+       ├───────────────────────────────>│                         │
+       │                                ├────────────────────────>│
+       │                                │  9. Process complete    │
+       │                                │     audio session       │
+       │                                │     - STT (Whisper)     │
+       │                                │     - AI (OpenAI)       │
+       │                                │     - TTS (ElevenLabs)  │
+       │                                │                         │
+       │                                │ 10. PUBLISH (tts)       │
+       │<───────────────────────────────┤<────────────────────────┤
+       │                                │   Using extracted topic │
+       │                                │   for correct device    │
+  11. Play audio                        │                         │
+       │                                │                         │
+```
 
 ## Topic-struktur
 
@@ -379,6 +445,90 @@ console.log('Received message on topic:', $input.item.json.topic);
 console.log('Payload:', JSON.stringify($input.item.json, null, 2));
 return $input.all();
 ```
+
+## n8n Workflow Export Exempel
+
+Här är ett minimalt men komplett n8n workflow som du kan importera direkt:
+
+```json
+{
+  "name": "AI Voice Agent - MQTT Handler",
+  "nodes": [
+    {
+      "parameters": {
+        "topic": "t/+/u/+/voice/+/control",
+        "options": {
+          "qos": 1,
+          "jsonParsePayload": true
+        }
+      },
+      "name": "MQTT Control Listener",
+      "type": "n8n-nodes-base.mqtt",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Parse MQTT topic to extract routing information\nconst topic = $input.item.json.topic;\nconst parts = topic.split('/');\n\n// Extract components\nconst tenant = parts[1];\nconst user = parts[3];\nconst deviceId = parts[5];\nconst messageType = parts[6];\n\n// Build response topics\nconst responseTopic = `t/${tenant}/u/${user}/voice/${deviceId}/response`;\nconst ttsTopic = `t/${tenant}/u/${user}/voice/${deviceId}/tts`;\n\n// Return enriched data\nreturn {\n  json: {\n    ...($input.item.json),\n    tenant,\n    user,\n    deviceId,\n    messageType,\n    responseTopic,\n    ttsTopic\n  }\n};"
+      },
+      "name": "Parse Topic",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.event}}",
+              "value2": "audio_end"
+            }
+          ]
+        }
+      },
+      "name": "Filter Audio End",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "topic": "={{$json.ttsTopic}}",
+        "sendInputData": false,
+        "message": "={\n  \"wav_b64\": \"{{$json.ttsAudioBase64}}\"\n}",
+        "options": {
+          "qos": 1
+        }
+      },
+      "name": "MQTT Publish TTS",
+      "type": "n8n-nodes-base.mqtt",
+      "typeVersion": 1,
+      "position": [1050, 300]
+    }
+  ],
+  "connections": {
+    "MQTT Control Listener": {
+      "main": [[{"node": "Parse Topic", "type": "main", "index": 0}]]
+    },
+    "Parse Topic": {
+      "main": [[{"node": "Filter Audio End", "type": "main", "index": 0}]]
+    },
+    "Filter Audio End": {
+      "main": [
+        [{"node": "Process Audio (Add your AI nodes here)", "type": "main", "index": 0}]
+      ]
+    }
+  }
+}
+```
+
+**Tips för att använda workflow-export:**
+1. Kopiera JSON ovan
+2. I n8n, klicka på **Import from File** eller **Import from Clipboard**
+3. Klistra in JSON
+4. Konfigurera MQTT-klientens anslutningsinställningar (broker, credentials)
+5. Lägg till dina egna noder för STT/AI/TTS mellan "Filter Audio End" och "MQTT Publish TTS"
 
 ## Sammanfattning
 
