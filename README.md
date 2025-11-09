@@ -14,6 +14,8 @@ Lättviktig röstagent som:
 - Down: `t/<tenant>/u/<user>/voice/<deviceId>/response` (QoS 1) – valfria meddelanden
 - TTS: `t/<tenant>/u/<user>/voice/<deviceId>/tts` (QoS 1) – JSON `{ wav_b64: "<...>" }`
 
+> **För n8n-integration:** Se [docs/N8N_INTEGRATION.md](docs/N8N_INTEGRATION.md) för detaljer om hur man bygger ett workflow som vet vilket topic den ska svara på.
+
 ## Krav
 - Raspberry Pi **Zero 2 WH**
 - KEYESTUDIO ReSpeaker 2‑Mic Pi HAT **V1.0** (WM8960)
