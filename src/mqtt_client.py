@@ -36,4 +36,5 @@ class MqttClient:
     def publish_json(self, topic, obj, qos=1, retain=False):
         import json
         payload = json.dumps(obj, ensure_ascii=False).encode('utf-8')
+        print(f"[MQTT] Publishing to topic: {topic}")
         self.client.publish(topic, payload, qos=qos, retain=retain)

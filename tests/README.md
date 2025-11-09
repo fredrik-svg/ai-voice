@@ -111,6 +111,36 @@ Testerna kontrollerar följande funktionalitet:
 3. **test_mqtt_publish_json**: Testar att skicka och ta emot JSON-meddelanden
 4. **test_mqtt_multiple_messages**: Verifierar att flera meddelanden i följd hanteras korrekt
 
+## MQTT Topic Visibility
+
+**NYHET**: Testerna visar nu tydligt vilka MQTT-topics som används när meddelanden skickas och tas emot. Detta gör det enkelt att verifiera att meddelanden kommer fram till rätt destination.
+
+När du kör testerna ser du nu:
+- Vilken MQTT-broker som används (host:port)
+- Exakt topic-path för varje meddelande som publiceras
+- Bekräftelse på vilka topics meddelanden tas emot från
+
+Exempel på output:
+```
+[Test] Ansluter till MQTT broker: localhost:1883
+✓ Anslutning till MQTT-broker localhost:1883 fungerar
+
+[Test] Prenumererar på topic: test/ai-voice/1762623680/multi
+[Test] Publicerar 5 meddelanden till topic: test/ai-voice/1762623680/multi
+✓ Skickade 5 meddelanden till 'test/ai-voice/1762623680/multi'
+✓ Mottog 5 meddelanden från 'test/ai-voice/1762623680/multi'
+
+[MQTT] Publishing to topic: test/ai-voice/1762623684/json
+✓ Skickade JSON till 'test/ai-voice/1762623684/json': {...}
+✓ Mottog JSON från 'test/ai-voice/1762623684/json': {...}
+```
+
+Detta gör det lätt att:
+- Förstå var meddelanden skickas
+- Verifiera att topics är korrekt konfigurerade
+- Debugga MQTT-anslutningsproblem
+- Konfigurera externa MQTT-klienter för att lyssna på rätt topics
+
 ## Konfiguration
 
 Testerna använder `config.yaml` för MQTT-inställningar. Om filen saknas, kopiera `config.example.yaml`:
@@ -122,25 +152,32 @@ cp config.example.yaml config.yaml
 
 ## Output
 
-När alla tester körs framgångsrikt ser du:
+När alla tester körs framgångsrikt ser du tydlig information om MQTT-topics:
 ```
 ==================================================================
 MQTT Client Test Suite
 Testar att skicka och ta emot meddelanden via MQTT
 ==================================================================
 
-test_mqtt_connect ... ✓ Anslutning till MQTT-broker fungerar
+test_mqtt_connect ... 
+[Test] Ansluter till MQTT broker: localhost:1883
+✓ Anslutning till MQTT-broker localhost:1883 fungerar
 ok
-test_mqtt_multiple_messages ... ✓ Skickade 5 meddelanden
-✓ Mottog 5 meddelanden
-✓ Flera meddelanden i följd fungerar
-ok
-test_mqtt_publish_and_subscribe ... ✓ Skickade meddelande: 'Hej från MQTT test!'
-✓ Mottog meddelande: 'Hej från MQTT test!'
+
+test_mqtt_publish_and_subscribe ... 
+[Test] Prenumererar på topic: test/ai-voice/1762623683
+[Test] Publicerar till topic: test/ai-voice/1762623683
+✓ Skickade meddelande till 'test/ai-voice/1762623683': 'Hej från MQTT test!'
+✓ Mottog meddelande från 'test/ai-voice/1762623683': 'Hej från MQTT test!'
 ✓ Skicka och ta emot meddelanden fungerar
 ok
-test_mqtt_publish_json ... ✓ Skickade JSON: {...}
-✓ Mottog JSON: {...}
+
+test_mqtt_publish_json ... 
+[Test] Prenumererar på topic: test/ai-voice/1762623684/json
+[Test] Publicerar JSON till topic: test/ai-voice/1762623684/json
+[MQTT] Publishing to topic: test/ai-voice/1762623684/json
+✓ Skickade JSON till 'test/ai-voice/1762623684/json': {...}
+✓ Mottog JSON från 'test/ai-voice/1762623684/json': {...}
 ✓ JSON-meddelanden fungerar korrekt
 ok
 
@@ -149,3 +186,8 @@ Ran 4 tests in 5.413s
 
 OK
 ```
+
+**Notera**: Med den nya topic visibility-funktionen kan du nu tydligt se:
+- Vilka MQTT-topics som används för varje test
+- Bekräftelse att meddelanden kommer fram till rätt topic
+- Detta gör det enkelt att övervaka meddelanden med externa verktyg som `mosquitto_sub`
