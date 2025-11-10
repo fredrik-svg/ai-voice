@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
-import sys, os, json, time, base64, threading, signal, yaml, uuid
+import sys, os, json, time, base64, threading, signal, yaml, uuid, logging
 from src.mqtt_client import MqttClient
 from src.audio_capture import AudioStreamer
 from src.playback import play_wav_bytes
 from src.gpio_button import Button
 from src.utils import now_ms, new_session_id
+
+# Setup logging
+logger = logging.getLogger(__name__)
 
 def check_venv():
     """Check if running in a virtual environment and warn if not."""
@@ -46,54 +49,68 @@ class VoiceAgent:
         self.mode = cfg['audio'].get('mode', 'ptt')
         self.topics = cfg['topics']
         self.button = None  # Store button reference for cleanup
+        self.debug = cfg.get('debug', False)
         # Prepare topics
         for k in list(self.topics.keys()):
             t = self.topics[k].format(tenant=cfg['tenant'], user=cfg['user'], deviceId=cfg['deviceId'])
             self.topics[k] = t
 
     def connect(self):
+        logger.info(f"Connecting to MQTT broker at {self.cfg['mqtt']['host']}:{self.cfg['mqtt']['port']}...")
         self.mqtt.connect()
+        logger.info("✓ MQTT connected successfully")
         # subscribe to tts and response
         self.mqtt.subscribe(self.topics['tts'], qos=1, on_message=self.on_tts)
         self.mqtt.subscribe(self.topics['response'], qos=1, on_message=self.on_response)
+        logger.info(f"✓ Subscribed to TTS and response topics")
         # online status
         self.publish_control({'status':'online'})
+        logger.info(f"✓ Device '{self.cfg['deviceId']}' is now online")
 
     def publish_control(self, obj):
-        self.mqtt.publish_json(self.topics['control'], {
+        payload = {
             'ts': now_ms(),
             'deviceId': self.cfg['deviceId'],
             **obj
-        }, qos=1, retain=False)
+        }
+        if self.debug:
+            logger.debug(f"[Control] {obj}")
+        self.mqtt.publish_json(self.topics['control'], payload, qos=1, retain=False)
 
     def on_response(self, msg):
         try:
             data = json.loads(msg.payload.decode('utf-8'))
         except Exception:
             data = {'raw': msg.payload[:80].hex()}
-        print("[response]", data)
+        logger.info(f"[Response] {data}")
 
     def on_tts(self, msg):
         try:
             data = json.loads(msg.payload.decode('utf-8'))
             if 'wav_b64' in data:
                 wav = base64.b64decode(data['wav_b64'])
+                logger.info(f"[TTS] Playing audio response ({len(wav)} bytes)")
                 play_wav_bytes(wav, device=self.cfg['playback']['device'], volume_pct=self.cfg['playback'].get('volume_pct'))
+                logger.info("[TTS] Playback complete")
         except Exception as e:
-            print("[tts] error:", e)
+            logger.error(f"[TTS] Error: {e}")
 
     def _start_session(self):
         self.session_id = new_session_id()
         self.seq = 0
+        logger.info(f"🎤 Session started: {self.session_id[:8]}...")
         self.publish_control({'event':'audio_start', 'session_id': self.session_id})
 
     def _end_session(self):
         if self.session_id:
+            logger.info(f"✓ Session ended: {self.session_id[:8]}... ({self.seq} frames, {self.seq * self.cfg['audio']['chunk_ms']}ms)")
             self.publish_control({'event':'audio_end', 'session_id': self.session_id, 'frames': self.seq})
         self.session_id = None
 
     def _publish_frame(self, pcm: bytes):
         self.seq += 1
+        if self.debug:
+            logger.debug(f"[Audio] Frame {self.seq} ({len(pcm)} bytes)")
         self.mqtt.publish_json(self.topics['audio'], {
             'ts': now_ms(),
             'session_id': self.session_id,
@@ -109,7 +126,8 @@ class VoiceAgent:
         self.button = Button(self.cfg['gpio']['button_pin'], self.cfg['gpio'].get('pull_up', True))
         self.button.on_pressed(lambda: threading.Thread(target=self._capture_once, daemon=True).start())
         self.button.start()
-        print("[agent] PTT mode: press the HAT button to talk (or press Enter in console).")
+        logger.info(f"[Agent] PTT mode: press GPIO{self.cfg['gpio']['button_pin']} button to talk")
+        logger.info(f"[Agent] VAD silence threshold: {self.cfg['audio']['vad_silence_ms']}ms")
         while self.running:
             time.sleep(0.2)
 
@@ -127,17 +145,19 @@ class VoiceAgent:
                     else:
                         silence_ms += self.cfg['audio']['chunk_ms']
                         if silence_ms >= int(self.cfg['audio']['vad_silence_ms']):
+                            logger.debug(f"Silence threshold reached ({silence_ms}ms), ending capture")
                             break
             finally:
                 self.streamer.stop()
         except Exception as e:
-            print(f"[ERROR] Audio capture failed: {e}", file=sys.stderr)
+            logger.error(f"[ERROR] Audio capture failed: {e}")
         finally:
             self._end_session()
 
     def run_vad(self):
         """Run in VAD mode with graceful error handling."""
-        print("[agent] VAD mode: auto start on voice, stop after silence.")
+        logger.info("[Agent] VAD mode: auto start on voice, stop after silence")
+        logger.info(f"[Agent] VAD aggressiveness: {self.cfg['audio']['vad_mode']}, silence threshold: {self.cfg['audio']['vad_silence_ms']}ms")
         try:
             self.streamer.start()
             in_session = False
@@ -155,19 +175,22 @@ class VoiceAgent:
                         else:
                             silence_ms += self.cfg['audio']['chunk_ms']
                         if silence_ms >= int(self.cfg['audio']['vad_silence_ms']):
+                            logger.debug(f"Silence threshold reached ({silence_ms}ms), ending session")
                             self._end_session()
                             in_session = False
+                            silence_ms = 0
             finally:
                 self.streamer.stop()
                 if in_session:
                     self._end_session()
         except Exception as e:
-            print(f"[ERROR] Audio capture failed: {e}", file=sys.stderr)
-            print(f"[ERROR] VAD mode cannot continue without audio device. Exiting.", file=sys.stderr)
+            logger.error(f"[ERROR] Audio capture failed: {e}")
+            logger.error(f"[ERROR] VAD mode cannot continue without audio device. Exiting.")
             self.stop()
             sys.exit(1)
 
     def stop(self):
+        logger.info("Shutting down voice agent...")
         self.running = False
         try: self.streamer.stop()
         except Exception: pass
@@ -175,6 +198,7 @@ class VoiceAgent:
             try: self.button.stop()
             except Exception: pass
         self.publish_control({'status':'offline'})
+        logger.info("✓ Voice agent stopped")
 
 def main():
     # Check if running in virtual environment
@@ -183,6 +207,19 @@ def main():
     cfg_path = sys.argv[1] if len(sys.argv) > 1 else "config.yaml"
     with open(cfg_path, 'r') as f:
         cfg = yaml.safe_load(f)
+    
+    # Setup logging based on debug flag
+    debug = cfg.get('debug', False)
+    log_level = logging.DEBUG if debug else logging.INFO
+    logging.basicConfig(
+        level=log_level,
+        format='%(asctime)s [%(levelname)s] %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    
+    if debug:
+        logger.info("Debug mode enabled - verbose logging active")
+    
     agent = VoiceAgent(cfg)
     agent.connect()
 
