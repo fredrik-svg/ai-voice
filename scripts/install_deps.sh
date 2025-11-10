@@ -48,10 +48,39 @@ retry_command sudo apt-get install -y \
   python3 python3-pip python3-dev python3-venv \
   git alsa-utils sox libasound2-dev
 
+# Check and add user to audio group
+echo "Checking audio group membership..."
+if ! groups | grep -q '\baudio\b'; then
+  echo "Adding user '$(whoami)' to 'audio' group for audio device access..."
+  sudo usermod -a -G audio "$(whoami)"
+  echo ""
+  echo "=============================================="
+  echo "IMPORTANT: Audio group membership updated!"
+  echo "=============================================="
+  echo "You have been added to the 'audio' group."
+  echo "You MUST log out and log back in (or reboot) for this to take effect."
+  echo "After logging back in, verify with: groups"
+  echo "You should see 'audio' in the list."
+  echo "=============================================="
+  echo ""
+else
+  echo "✓ User is already in 'audio' group"
+fi
+
 # Create virtual environment if it doesn't exist
 if [ ! -d "venv" ]; then
   echo "Creating virtual environment..."
   python3 -m venv venv
+  
+  # Verify venv was created successfully
+  if [ ! -f "venv/bin/activate" ]; then
+    echo "ERROR: Failed to create virtual environment!" >&2
+    echo "The venv directory exists but venv/bin/activate was not created." >&2
+    exit 1
+  fi
+  echo "✓ Virtual environment created successfully"
+else
+  echo "✓ Virtual environment already exists"
 fi
 
 # Activate virtual environment and install Python dependencies
