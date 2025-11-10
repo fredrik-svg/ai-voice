@@ -1,4 +1,4 @@
-import subprocess, threading, collections, time, warnings, sys
+import subprocess, threading, collections, time, warnings, sys, os, grp
 
 # Suppress the pkg_resources deprecation warning from webrtcvad
 with warnings.catch_warnings():
@@ -7,6 +7,50 @@ with warnings.catch_warnings():
 
 # Constants
 PROCESS_START_CHECK_DELAY = 0.1  # seconds to wait before checking if arecord started successfully
+
+def _is_user_in_audio_group_file():
+    """Check if the current user is listed in the audio group in /etc/group.
+    
+    This checks the group file on disk, not the current session's active groups.
+    Useful for detecting when a user has been added to audio group but hasn't
+    logged out yet to activate the membership.
+    
+    Returns:
+        bool: True if user is in audio group in /etc/group, False otherwise
+    """
+    try:
+        username = os.getenv('USER') or os.getenv('USERNAME')
+        if not username:
+            return False
+        
+        # Read /etc/group to check if user is listed in audio group
+        with open('/etc/group', 'r') as f:
+            for line in f:
+                if line.startswith('audio:'):
+                    # Format: audio:x:29:user1,user2,user3
+                    parts = line.strip().split(':')
+                    if len(parts) >= 4:
+                        members = parts[3].split(',')
+                        if username in members:
+                            return True
+        return False
+    except Exception:
+        return False
+
+def _is_user_in_audio_group_session():
+    """Check if the audio group is active in the current session.
+    
+    Returns:
+        bool: True if audio group is in current session's groups, False otherwise
+    """
+    try:
+        # Get all groups for the current process
+        groups = os.getgroups()
+        # Get the audio group ID
+        audio_gid = grp.getgrnam('audio').gr_gid
+        return audio_gid in groups
+    except Exception:
+        return False
 
 class AudioStreamer:
     def __init__(self, cfg):
@@ -186,11 +230,40 @@ class AudioStreamer:
                 
                 if is_permission_error:
                     print(f"[ERROR] Permission denied when accessing audio device '{self.device}'.", file=sys.stderr)
-                    print(f"[INFO] This usually means your user doesn't have permission to access audio devices.", file=sys.stderr)
-                    print(f"[INFO] To fix this, add your user to the 'audio' group:", file=sys.stderr)
-                    print(f"[INFO]   sudo usermod -a -G audio $USER", file=sys.stderr)
-                    print(f"[INFO]   Then log out and log back in for the changes to take effect.", file=sys.stderr)
-                    print(f"[INFO] You can verify group membership with: groups", file=sys.stderr)
+                    
+                    # Check if user is in audio group in /etc/group but not in current session
+                    in_group_file = _is_user_in_audio_group_file()
+                    in_session = _is_user_in_audio_group_session()
+                    
+                    if in_group_file and not in_session:
+                        # User has been added to audio group but hasn't logged out yet
+                        print(f"[INFO] You are listed in the 'audio' group, but it's not active in this session.", file=sys.stderr)
+                        print(f"[INFO] This means you were recently added to the group but haven't logged out yet.", file=sys.stderr)
+                        print(f"[INFO] ", file=sys.stderr)
+                        print(f"[INFO] To activate the group membership:", file=sys.stderr)
+                        print(f"[INFO]   1. Save your work and exit all programs", file=sys.stderr)
+                        print(f"[INFO]   2. Log out completely (exit SSH session or log out of GUI)", file=sys.stderr)
+                        print(f"[INFO]   3. Log back in", file=sys.stderr)
+                        print(f"[INFO]   4. Verify with: groups (you should see 'audio' in the list)", file=sys.stderr)
+                        print(f"[INFO] ", file=sys.stderr)
+                        print(f"[INFO] Alternative for testing (temporary, resets on reboot):", file=sys.stderr)
+                        print(f"[INFO]   sudo chmod a+rw /dev/snd/*", file=sys.stderr)
+                    elif not in_group_file:
+                        # User is not in audio group at all
+                        print(f"[INFO] Your user doesn't have permission to access audio devices.", file=sys.stderr)
+                        print(f"[INFO] To fix this, add your user to the 'audio' group:", file=sys.stderr)
+                        print(f"[INFO]   sudo usermod -a -G audio $USER", file=sys.stderr)
+                        print(f"[INFO]   Then log out and log back in for the changes to take effect.", file=sys.stderr)
+                        print(f"[INFO] You can verify group membership with: groups", file=sys.stderr)
+                    else:
+                        # User is in audio group in session, but still getting permission error
+                        # This could be due to other issues (e.g., device permissions, SELinux, etc.)
+                        print(f"[INFO] You appear to be in the 'audio' group, but still getting permission errors.", file=sys.stderr)
+                        print(f"[INFO] This could be due to:", file=sys.stderr)
+                        print(f"[INFO]   - Device file permissions: Check 'ls -l /dev/snd/*'", file=sys.stderr)
+                        print(f"[INFO]   - SELinux/AppArmor restrictions", file=sys.stderr)
+                        print(f"[INFO]   - Device locked by another process", file=sys.stderr)
+                        print(f"[INFO] Try temporarily: sudo chmod a+rw /dev/snd/*", file=sys.stderr)
                 elif "audio open error" in stderr_lower:
                     print(f"[ERROR] Failed to open audio device '{self.device}'.", file=sys.stderr)
                     print(f"[INFO] Please verify the device exists and is configured correctly in config.yaml.", file=sys.stderr)
