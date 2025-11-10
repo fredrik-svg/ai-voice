@@ -6,6 +6,31 @@ from src.playback import play_wav_bytes
 from src.gpio_button import Button
 from src.utils import now_ms, new_session_id
 
+def check_venv():
+    """Check if running in a virtual environment and warn if not."""
+    # Check if we're in a virtual environment
+    in_venv = (hasattr(sys, 'real_prefix') or 
+               (hasattr(sys, 'base_prefix') and sys.base_prefix != sys.prefix))
+    
+    if not in_venv:
+        print("=" * 70, file=sys.stderr)
+        print("VARNING: Körs inte i en virtuell Python-miljö!", file=sys.stderr)
+        print("WARNING: Not running in a Python virtual environment!", file=sys.stderr)
+        print("=" * 70, file=sys.stderr)
+        print("", file=sys.stderr)
+        print("Detta kan orsaka problem på moderna Raspberry Pi OS (Bookworm)", file=sys.stderr)
+        print("där systemets Python-miljö är 'externally-managed'.", file=sys.stderr)
+        print("", file=sys.stderr)
+        print("Rekommenderad lösning:", file=sys.stderr)
+        print("  1. Kör: ./scripts/install_deps.sh (skapar venv)", file=sys.stderr)
+        print("  2. Starta sedan med: ./scripts/run.sh", file=sys.stderr)
+        print("", file=sys.stderr)
+        print("Eller aktivera manuellt:", file=sys.stderr)
+        print("  source venv/bin/activate", file=sys.stderr)
+        print("  python3 -m src.agent config.yaml", file=sys.stderr)
+        print("=" * 70, file=sys.stderr)
+        print("", file=sys.stderr)
+
 def load_config(path):
     with open(path, 'r') as f:
         return yaml.safe_load(f)
@@ -149,6 +174,9 @@ class VoiceAgent:
         self.publish_control({'status':'offline'})
 
 def main():
+    # Check if running in virtual environment
+    check_venv()
+    
     cfg_path = sys.argv[1] if len(sys.argv) > 1 else "config.yaml"
     with open(cfg_path, 'r') as f:
         cfg = yaml.safe_load(f)
