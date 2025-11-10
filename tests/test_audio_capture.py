@@ -287,6 +287,34 @@ class TestAudioCapture(unittest.TestCase):
         period_size = arecord_cmd[period_index + 1]
         self.assertEqual(period_size, '1024', "Default period size should be 1024")
 
+    def test_validate_device_returns_false_when_arecord_unavailable(self):
+        """Test that validate_device returns False when arecord command is not found."""
+        streamer = AudioStreamer(self.test_config)
+        
+        # Mock subprocess.run to raise FileNotFoundError
+        import subprocess
+        from unittest.mock import patch
+        
+        with patch('subprocess.run', side_effect=FileNotFoundError("arecord not found")):
+            result = streamer.validate_device()
+            self.assertFalse(result, "validate_device should return False when arecord is not found")
+
+    def test_validate_device_returns_false_on_nonzero_exit_code(self):
+        """Test that validate_device returns False when arecord -l fails."""
+        streamer = AudioStreamer(self.test_config)
+        
+        # Mock subprocess.run to return non-zero exit code
+        import subprocess
+        from unittest.mock import patch, Mock
+        
+        mock_result = Mock()
+        mock_result.returncode = 1
+        mock_result.stdout = ""
+        mock_result.stderr = "Error: No audio devices found"
+        
+        with patch('subprocess.run', return_value=mock_result):
+            result = streamer.validate_device()
+            self.assertFalse(result, "validate_device should return False when arecord -l fails")
 
 
 if __name__ == '__main__':
