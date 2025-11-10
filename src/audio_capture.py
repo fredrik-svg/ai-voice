@@ -26,6 +26,14 @@ class AudioStreamer:
         # WM8960 codec requires 2-channel (stereo) capture
         # We record in stereo and convert to mono using sox
         # to maintain compatibility with downstream mono processing
+        # 
+        # Buffer and period sizes are set to prevent I/O errors:
+        # - Buffer size: 8192 frames (prevents buffer underruns)
+        # - Period size: 1024 frames (balances latency and reliability)
+        # These values are optimized for WM8960 at 16kHz stereo
+        buffer_size = self.cfg['audio'].get('buffer_size', 8192)
+        period_size = self.cfg['audio'].get('period_size', 1024)
+        
         arecord_part = [
             'arecord',
             '-q',
@@ -33,7 +41,9 @@ class AudioStreamer:
             '-c', '2',  # Record in stereo (hardware requirement)
             '-f', self.format,
             '-r', str(self.rate),
-            '-t', 'raw'
+            '-t', 'raw',
+            '--buffer-size', str(buffer_size),
+            '--period-size', str(period_size)
         ]
         
         # Convert stereo to mono using sox

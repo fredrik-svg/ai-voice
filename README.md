@@ -41,12 +41,15 @@ Testa sedan att spela in/upp:
 ```bash
 arecord -l                # se kort-id
 # WM8960 kräver stereo (2 kanaler) inspelning
-arecord -D plughw:1,0 -c 2 -f S16_LE -r 16000 -d 3 test.wav
+# Buffer och period size förhindrar I/O-fel
+arecord -D plughw:1,0 -c 2 -f S16_LE -r 16000 --buffer-size 8192 --period-size 1024 -d 3 test.wav
 aplay   -D plughw:1,0 test.wav
 ```
 Ställ in ditt `device` i `config.yaml` (t.ex. `plughw:1,0`).
 
 **OBS:** WM8960-kodeken kräver stereoinspelning (2 kanaler). Programmet hanterar automatiskt konvertering från stereo till mono via sox.
+
+**Tips:** Om du får "Input/output error" vid inspelning, kontrollera att buffer- och periodstorlekarna är korrekt inställda i `config.yaml`. Standardvärdena (buffer_size: 8192, period_size: 1024) är optimerade för WM8960.
 
 ## Konfiguration
 Redigera `config.yaml`:
@@ -156,6 +159,7 @@ Agenten spelar upp via `aplay` på ALSA‑enheten i `config.yaml`.
 
 ## Felsökning
 - Ingen ljudenhet? Kontrollera att I²S är på (`dtparam=i2s=on`) och att rätt WM8960‑overlay/drivrutin är installerad.
+- **Input/output error** vid inspelning? WM8960-kodeken kräver korrekt buffer- och periodstorlek. Kontrollera att `buffer_size: 8192` och `period_size: 1024` är satta i `config.yaml` (standardvärdena). Testa även med `arecord -D plughw:1,0 -c 2 -f S16_LE -r 16000 --buffer-size 8192 --period-size 1024 -d 3 test.wav`.
 - Hackigt ljud? Prova `plughw` istället för `hw`, sänk `vad_mode` till 1, eller öka `vad_silence_ms`.
 - CPU-spikar? Kör i **ptt**‑läge och undvik konstant VAD om nätaggregatet är svagt.
 
