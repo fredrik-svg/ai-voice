@@ -189,14 +189,18 @@ Agenten spelar upp via `aplay` på ALSA‑enheten i `config.yaml`.
 Detta är vanligtvis ett behörighetsproblem. Din användare har inte tillåtelse att komma åt ljudenheten.
 
 **Lösning:**
+Installationsskriptet (`install_deps.sh` eller `install_deps_pi5.sh`) lägger automatiskt till din användare i `audio`-gruppen. Om du fortfarande får detta fel:
+
 ```bash
-# Lägg till din användare i audio-gruppen
+# Kontrollera att du är med i audio-gruppen:
+groups
+# Du ska se "audio" i listan
+
+# Om "audio" inte finns i listan, lägg till den manuellt:
 sudo usermod -a -G audio $USER
 
 # Logga ut och logga in igen (eller starta om)
-# Verifiera att du är med i gruppen:
-groups
-# Du ska se "audio" i listan
+# Gruppmedlemskap träder inte i kraft förrän du loggar in igen
 ```
 
 **Alternativ lösning (tillfällig, för testning):**
