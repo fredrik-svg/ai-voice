@@ -227,6 +227,60 @@ class TestAudioCapture(unittest.TestCase):
         # plus more for other flags like -t, -e, -b, -c, -r
         self.assertGreaterEqual(dash_count, 2,
                                "sox should use stdin/stdout for piping")
+    
+    def test_sox_cmd_remix_effect_comes_after_output_filename(self):
+        """Test that remix effects come AFTER the output filename (not before).
+        
+        This is a regression test for a bug where insert(-1, ...) was used instead of append(),
+        causing the sox command to have incorrect argument order:
+        - Wrong: sox ... - ... remix 1 -
+        - Correct: sox ... - ... - remix 1
+        
+        The sox command syntax is: sox [input opts] infile [output opts] outfile [effects]
+        Effects must come after the output filename, not before it.
+        """
+        streamer = AudioStreamer(self.usb_config)
+        arecord_cmd, sox_cmd = streamer._arecord_cmd()
+        
+        # Find the last occurrence of '-' (output filename)
+        last_dash_idx = -1
+        for i in range(len(sox_cmd) - 1, -1, -1):
+            if sox_cmd[i] == '-':
+                last_dash_idx = i
+                break
+        
+        # Find the remix effect
+        self.assertIn('remix', sox_cmd, "remix effect should be present for 6-channel config")
+        remix_idx = sox_cmd.index('remix')
+        
+        # remix must come AFTER the last dash (output filename)
+        self.assertGreater(remix_idx, last_dash_idx,
+                          f"remix effect must come AFTER output filename. "
+                          f"Got command: {' '.join(sox_cmd[-5:])}")
+        
+        # Also verify the channel parameter comes right after remix
+        self.assertEqual(sox_cmd[remix_idx + 1], '1',
+                        "Channel parameter should immediately follow remix")
+        
+        # Test beamformed mode as well
+        beamformed_config = self.usb_config.copy()
+        beamformed_config['audio'] = self.usb_config['audio'].copy()
+        beamformed_config['audio']['channel_mode'] = 'beamformed'
+        
+        streamer2 = AudioStreamer(beamformed_config)
+        arecord_cmd2, sox_cmd2 = streamer2._arecord_cmd()
+        
+        # Find last dash in beamformed command
+        last_dash_idx2 = -1
+        for i in range(len(sox_cmd2) - 1, -1, -1):
+            if sox_cmd2[i] == '-':
+                last_dash_idx2 = i
+                break
+        
+        remix_idx2 = sox_cmd2.index('remix')
+        self.assertGreater(remix_idx2, last_dash_idx2,
+                          f"remix effect must come AFTER output filename in beamformed mode. "
+                          f"Got command: {' '.join(sox_cmd2[-5:])}")
 
     def test_chunk_bytes_calculation(self):
         """Test that chunk_bytes is calculated correctly for mono output."""

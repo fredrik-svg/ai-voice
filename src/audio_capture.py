@@ -129,12 +129,12 @@ class AudioStreamer:
         # Add channel remixing for specific modes
         if input_channels == 6 and channel_mode == 'processed':
             # Extract only channel 0 (processed audio) for ReSpeaker USB
-            sox_part.insert(-1, 'remix')
-            sox_part.insert(-1, '1')  # Select channel 1 (0-indexed becomes 1 in sox)
+            sox_part.append('remix')
+            sox_part.append('1')  # Select channel 1 (0-indexed becomes 1 in sox)
         elif input_channels == 6 and channel_mode == 'beamformed':
             # Average channels 1-4 (raw microphones) for custom beamforming
-            sox_part.insert(-1, 'remix')
-            sox_part.insert(-1, '2,3,4,5')  # Average channels 2-5 (mics 1-4 in 1-indexed)
+            sox_part.append('remix')
+            sox_part.append('2,3,4,5')  # Average channels 2-5 (mics 1-4 in 1-indexed)
         # For 2-channel or other configs, sox will average all channels by default
         
         return arecord_part, sox_part
