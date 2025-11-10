@@ -211,31 +211,39 @@ class AudioStreamer:
             # Give the processes a moment to start, then check if they failed immediately
             time.sleep(PROCESS_START_CHECK_DELAY)
             
+            # Check if sox failed first (since it's downstream and can cause arecord to get SIGPIPE)
+            sox_poll = self.proc.poll()
+            sox_stderr = ""
+            if sox_poll is not None:
+                sox_stderr = self.proc.stderr.read().decode('utf-8', errors='replace').strip()
+                print(f"[ERROR] sox failed to start (exit code {sox_poll})", file=sys.stderr)
+                if sox_stderr:
+                    print(f"[ERROR] sox output: {sox_stderr}", file=sys.stderr)
+                raise RuntimeError(f"Failed to start audio conversion: {sox_stderr}")
+            
             # Check if arecord failed
             arecord_poll = arecord_proc.poll()
             if arecord_poll is not None:
-                stderr_output = arecord_proc.stderr.read().decode('utf-8', errors='replace').strip()
-                print(f"[ERROR] arecord failed to start (exit code {arecord_poll})", file=sys.stderr)
-                if stderr_output:
-                    print(f"[ERROR] arecord output: {stderr_output}", file=sys.stderr)
+                arecord_stderr = arecord_proc.stderr.read().decode('utf-8', errors='replace').strip()
                 
-                # Check for specific error conditions
+                # Determine the actual error type based on stderr content and exit code
                 is_permission_error = False
-                stderr_lower = stderr_output.lower()
+                stderr_lower = arecord_stderr.lower()
                 
-                # Detect permission-related errors
-                # Exit code -13 often indicates signal 13 (SIGPIPE) but can also indicate permission issues
-                # Common error messages for permission issues include:
-                # - "permission denied"
-                # - "audio open error" (often caused by lack of permissions)
-                # - "device or resource busy" (can indicate permission issues)
-                if (abs(arecord_poll) == 13 or 
-                    "permission denied" in stderr_lower or
-                    ("audio open error" in stderr_lower and "busy" not in stderr_lower)):
+                # Only treat as permission error if there's actual evidence:
+                # - Explicit "permission denied" in stderr
+                # Note: Exit code -13 is SIGPIPE (broken pipe), NOT a permission error.
+                # SIGPIPE happens when arecord writes to a closed pipe (e.g., if sox exited).
+                # "audio open error" alone is not sufficient - need explicit permission message.
+                if arecord_stderr and "permission denied" in stderr_lower:
                     is_permission_error = True
                 
+                # Report the error with appropriate context
                 if is_permission_error:
-                    print(f"[ERROR] Permission denied when accessing audio device '{self.device}'.", file=sys.stderr)
+                    print(f"[ERROR] arecord failed to start: Permission denied", file=sys.stderr)
+                    if arecord_stderr:
+                        print(f"[ERROR] arecord output: {arecord_stderr}", file=sys.stderr)
+                    print(f"[ERROR] Cannot access audio device '{self.device}'.", file=sys.stderr)
                     
                     # Check if user is in audio group in /etc/group but not in current session
                     in_group_file = _is_user_in_audio_group_file()
@@ -270,24 +278,30 @@ class AudioStreamer:
                         print(f"[INFO]   - SELinux/AppArmor restrictions", file=sys.stderr)
                         print(f"[INFO]   - Device locked by another process", file=sys.stderr)
                         print(f"[INFO] Try temporarily: sudo chmod a+rw /dev/snd/*", file=sys.stderr)
-                elif "audio open error" in stderr_lower:
+                elif arecord_stderr and "audio open error" in stderr_lower:
+                    # Device open error (not permission-related)
+                    print(f"[ERROR] arecord failed to start (exit code {arecord_poll})", file=sys.stderr)
+                    print(f"[ERROR] arecord output: {arecord_stderr}", file=sys.stderr)
                     print(f"[ERROR] Failed to open audio device '{self.device}'.", file=sys.stderr)
                     print(f"[INFO] Please verify the device exists and is configured correctly in config.yaml.", file=sys.stderr)
                     print(f"[INFO] Run 'arecord -l' to list available capture devices.", file=sys.stderr)
                     if "busy" in stderr_lower:
                         print(f"[INFO] The device may be in use by another application.", file=sys.stderr)
                         print(f"[INFO] Try closing other audio applications or use 'fuser -v /dev/snd/*' to find processes using audio.", file=sys.stderr)
+                elif arecord_poll == -13 or (arecord_poll < 0 and abs(arecord_poll) == 13):
+                    # SIGPIPE - likely sox failed first or pipe was closed
+                    print(f"[ERROR] arecord received SIGPIPE (broken pipe)", file=sys.stderr)
+                    if arecord_stderr:
+                        print(f"[ERROR] arecord output: {arecord_stderr}", file=sys.stderr)
+                    print(f"[INFO] This usually means the downstream process (sox) closed the pipe.", file=sys.stderr)
+                    print(f"[INFO] Check that sox is installed and the audio pipeline configuration is correct.", file=sys.stderr)
+                else:
+                    # Generic error
+                    print(f"[ERROR] arecord failed to start (exit code {arecord_poll})", file=sys.stderr)
+                    if arecord_stderr:
+                        print(f"[ERROR] arecord output: {arecord_stderr}", file=sys.stderr)
                 
-                raise RuntimeError(f"Failed to start audio capture: {stderr_output}")
-            
-            # Check if sox failed
-            sox_poll = self.proc.poll()
-            if sox_poll is not None:
-                stderr_output = self.proc.stderr.read().decode('utf-8', errors='replace').strip()
-                print(f"[ERROR] sox failed to start (exit code {sox_poll})", file=sys.stderr)
-                if stderr_output:
-                    print(f"[ERROR] sox output: {stderr_output}", file=sys.stderr)
-                raise RuntimeError(f"Failed to start audio conversion: {stderr_output}")
+                raise RuntimeError(f"Failed to start audio capture: {arecord_stderr}")
             
             self.running = True
         except FileNotFoundError as e:

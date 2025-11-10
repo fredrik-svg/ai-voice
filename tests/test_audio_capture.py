@@ -374,6 +374,160 @@ class TestAudioGroupHelpers(unittest.TestCase):
             self.assertFalse(result)
 
 
+class TestAudioCaptureErrorHandling(unittest.TestCase):
+    """Test error handling in AudioStreamer.start()."""
+
+    def setUp(self):
+        """Set up test configuration."""
+        self.test_config = {
+            'audio': {
+                'rate': 16000,
+                'channels': 1,
+                'format': 'S16_LE',
+                'device': 'plughw:CARD=ArrayUAC10,DEV=0',
+                'chunk_ms': 20,
+                'vad_mode': 2,
+                'vad_silence_ms': 800,
+                'mode': 'vad',
+                'input_channels': 6,
+                'channel_mode': 'processed'
+            }
+        }
+
+    def test_start_detects_sox_failure_before_arecord(self):
+        """Test that sox failure is detected before checking arecord (avoiding misleading SIGPIPE errors)."""
+        from unittest.mock import patch, Mock
+        from io import StringIO
+        
+        streamer = AudioStreamer(self.test_config)
+        
+        # Mock subprocess.Popen to simulate sox failing immediately
+        mock_sox_proc = Mock()
+        mock_sox_proc.poll.return_value = 1  # sox failed
+        mock_sox_proc.stderr.read.return_value = b"sox FAIL formats: can't open input"
+        
+        mock_arecord_proc = Mock()
+        mock_arecord_proc.poll.return_value = -13  # Would get SIGPIPE due to sox failure
+        mock_arecord_proc.stdout = Mock()
+        
+        # Mock validate_device to return True (skip the subprocess.run call)
+        with patch.object(streamer, 'validate_device', return_value=True):
+            with patch('subprocess.Popen') as mock_popen:
+                # First call creates arecord process, second call creates sox process
+                mock_popen.side_effect = [mock_arecord_proc, mock_sox_proc]
+                
+                with patch('sys.stderr', new_callable=StringIO) as mock_stderr:
+                    with self.assertRaises(RuntimeError) as context:
+                        streamer.start()
+                    
+                    # Verify sox error is reported
+                    stderr_output = mock_stderr.getvalue()
+                    self.assertIn('[ERROR] sox failed to start', stderr_output)
+                    self.assertIn("sox FAIL formats: can't open input", stderr_output)
+                    
+                    # Verify we DON'T see misleading permission error message
+                    self.assertNotIn('Permission denied', stderr_output)
+                    
+                    # Verify the exception mentions sox, not arecord
+                    self.assertIn('Failed to start audio conversion', str(context.exception))
+
+    def test_start_detects_sigpipe_correctly(self):
+        """Test that SIGPIPE (exit code -13) is correctly identified and reported."""
+        from unittest.mock import patch, Mock
+        from io import StringIO
+        
+        streamer = AudioStreamer(self.test_config)
+        
+        # Mock subprocess.Popen to simulate arecord getting SIGPIPE
+        mock_sox_proc = Mock()
+        mock_sox_proc.poll.return_value = None  # sox is still running
+        
+        mock_arecord_proc = Mock()
+        mock_arecord_proc.poll.return_value = -13  # SIGPIPE
+        mock_arecord_proc.stderr.read.return_value = b""  # No stderr output
+        mock_arecord_proc.stdout = Mock()
+        
+        # Mock validate_device to return True
+        with patch.object(streamer, 'validate_device', return_value=True):
+            with patch('subprocess.Popen') as mock_popen:
+                mock_popen.side_effect = [mock_arecord_proc, mock_sox_proc]
+                
+                with patch('sys.stderr', new_callable=StringIO) as mock_stderr:
+                    with self.assertRaises(RuntimeError):
+                        streamer.start()
+                    
+                    stderr_output = mock_stderr.getvalue()
+                    # Should report SIGPIPE, not permission error
+                    self.assertIn('arecord received SIGPIPE', stderr_output)
+                    self.assertIn('broken pipe', stderr_output)
+                    self.assertNotIn('Permission denied', stderr_output)
+                    self.assertNotIn('audio group', stderr_output)
+
+    def test_start_detects_permission_error_with_evidence(self):
+        """Test that permission errors are only reported when there's actual evidence in stderr."""
+        from unittest.mock import patch, Mock
+        from io import StringIO
+        
+        streamer = AudioStreamer(self.test_config)
+        
+        # Mock subprocess.Popen to simulate actual permission error
+        mock_sox_proc = Mock()
+        mock_sox_proc.poll.return_value = None  # sox is still running
+        
+        mock_arecord_proc = Mock()
+        mock_arecord_proc.poll.return_value = 1  # Non-zero exit
+        mock_arecord_proc.stderr.read.return_value = b"arecord: main:850: audio open error: Permission denied"
+        mock_arecord_proc.stdout = Mock()
+        
+        # Mock validate_device to return True
+        with patch.object(streamer, 'validate_device', return_value=True):
+            with patch('subprocess.Popen') as mock_popen:
+                mock_popen.side_effect = [mock_arecord_proc, mock_sox_proc]
+                
+                with patch('sys.stderr', new_callable=StringIO) as mock_stderr:
+                    with self.assertRaises(RuntimeError):
+                        streamer.start()
+                    
+                    stderr_output = mock_stderr.getvalue()
+                    # Should report permission error with helpful guidance
+                    self.assertIn('Permission denied', stderr_output)
+                    self.assertIn('Cannot access audio device', stderr_output)
+                    # Should provide guidance about audio group
+                    self.assertIn('audio', stderr_output.lower())
+
+    def test_start_detects_device_not_found_error(self):
+        """Test that device not found errors are properly reported."""
+        from unittest.mock import patch, Mock
+        from io import StringIO
+        
+        streamer = AudioStreamer(self.test_config)
+        
+        # Mock subprocess.Popen to simulate device not found
+        mock_sox_proc = Mock()
+        mock_sox_proc.poll.return_value = None  # sox is still running
+        
+        mock_arecord_proc = Mock()
+        mock_arecord_proc.poll.return_value = 1  # Non-zero exit
+        mock_arecord_proc.stderr.read.return_value = b"arecord: main:850: audio open error: No such file or directory"
+        mock_arecord_proc.stdout = Mock()
+        
+        # Mock validate_device to return True
+        with patch.object(streamer, 'validate_device', return_value=True):
+            with patch('subprocess.Popen') as mock_popen:
+                mock_popen.side_effect = [mock_arecord_proc, mock_sox_proc]
+                
+                with patch('sys.stderr', new_callable=StringIO) as mock_stderr:
+                    with self.assertRaises(RuntimeError):
+                        streamer.start()
+                    
+                    stderr_output = mock_stderr.getvalue()
+                    # Should report device error
+                    self.assertIn('Failed to open audio device', stderr_output)
+                    self.assertIn('arecord -l', stderr_output)
+                    # Should NOT report permission error
+                    self.assertNotIn('Permission denied', stderr_output)
+
+
 if __name__ == '__main__':
     print("=" * 70)
     print("Audio Capture Test Suite")
