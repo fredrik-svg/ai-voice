@@ -138,10 +138,14 @@ Hur multi-kanaler konverteras till mono:
 - `"processed"`: Använd kanal 0 (DSP-processat ljud) - **rekommenderat för ASR**
 - `"beamformed"`: Medelvärde av kanaler 1-4 (råa mikrofoner) - för egen beamforming
 
-#### `buffer_size` och `period_size`
-USB-ljudenheter behöver andra värden än I²S:
-- `buffer_size: 4096` (vs 8192 för I²S)
-- `period_size: 512` (vs 1024 för I²S)
+#### `buffer_size` och `period_size` (valfritt)
+Dessa parametrar är **valfria** och behöver normalt inte anges för USB-enheter:
+- USB-enheter (som ReSpeaker USB 4-Mic Array) fungerar oftast bäst **utan** dessa parametrar
+- ALSA väljer automatiskt lämpliga värden baserat på hårdvaran
+- För I²S-enheter (som WM8960) kan det vara nödvändigt att sätta `buffer_size: 8192` och `period_size: 1024` för att förhindra I/O-fel
+- Om du får I/O-fel med USB, prova att lägga till: `buffer_size: 4096` och `period_size: 512`
+
+**Rekommendation för ReSpeaker USB:** Lämna bort dessa parametrar (kommenterade i config.pi5-usb.example.yaml)
 
 #### `mode`
 - `"vad"`: Automatisk aktivering vid röst (rekommenderat för ReSpeaker USB)
@@ -228,9 +232,10 @@ sudo chmod a+rw /dev/snd/*
 
 ### Andra inspelningsfel
 Om du får "Input/output error":
-- Kontrollera buffer- och periodstorlekarna i config.yaml
-- USB-ljud använder typiskt mindre buffertar: `buffer_size: 4096`, `period_size: 512`
-- Prova olika värden: 2048/256 eller 8192/1024
+- **För ReSpeaker USB 4-Mic Array**: Ta bort buffer_size och period_size från config.yaml (låt ALSA använda standardvärden)
+- **Om problemet kvarstår**: Prova att lägga till explicit: `buffer_size: 4096` och `period_size: 512`
+- **För I²S-enheter (WM8960)**: Sätt `buffer_size: 8192` och `period_size: 1024`
+- Kontrollera att enhetsnamnet är korrekt med `arecord -l`
 
 ### Hackigt ljud
 - Prova `plughw` istället för `hw` i `device`-konfigurationen

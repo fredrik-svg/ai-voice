@@ -33,8 +33,8 @@ audio:
   vad_mode: 2                   # 0-3 (webrtcvad aggressiveness)
   vad_silence_ms: 800           # stop after this much silence
   mode: "vad"                   # "ptt" (push-to-talk button) or "vad" (auto start on voice)
-  buffer_size: 4096             # ALSA buffer size in frames (USB audio typically needs smaller buffers)
-  period_size: 512              # ALSA period size in frames (balances latency and reliability for USB)
+  # buffer_size: 4096           # Optional: ALSA buffer size in frames. USB devices usually work better without this.
+  # period_size: 512            # Optional: ALSA period size in frames. USB devices usually work better without this.
   input_channels: 6             # Number of channels to capture from hardware (6 for ReSpeaker USB)
   channel_mode: "processed"     # "processed" (use channel 0) or "beamformed" (average channels 1-4)
 

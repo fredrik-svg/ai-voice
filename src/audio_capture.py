@@ -76,11 +76,12 @@ class AudioStreamer:
         #   Channels 1-4: Raw audio from each microphone
         #   Channel 5: Playback audio
         # 
-        # Buffer and period sizes are set to prevent I/O errors:
-        # - Default for I2S: buffer 8192, period 1024
-        # - Default for USB: buffer 4096, period 512 (USB needs smaller buffers)
-        buffer_size = self.cfg['audio'].get('buffer_size', 8192)
-        period_size = self.cfg['audio'].get('period_size', 1024)
+        # Buffer and period sizes are optional and can be set to prevent I/O errors:
+        # - I2S devices (like WM8960): Often need explicit buffer 8192, period 1024
+        # - USB devices (like ReSpeaker USB): Usually work better without explicit sizes (let ALSA use defaults)
+        # If not specified in config, ALSA will use appropriate defaults for the device
+        buffer_size = self.cfg['audio'].get('buffer_size')
+        period_size = self.cfg['audio'].get('period_size')
         
         # Get input channel count from config (default to 2 for backward compatibility)
         input_channels = self.cfg['audio'].get('input_channels', 2)
@@ -92,10 +93,15 @@ class AudioStreamer:
             '-c', str(input_channels),  # Record in specified channel count
             '-f', self.format,
             '-r', str(self.rate),
-            '-t', 'raw',
-            '--buffer-size', str(buffer_size),
-            '--period-size', str(period_size)
+            '-t', 'raw'
         ]
+        
+        # Only add buffer and period sizes if explicitly configured
+        # Some devices (like USB audio) work better without these parameters
+        if buffer_size is not None:
+            arecord_part.extend(['--buffer-size', str(buffer_size)])
+        if period_size is not None:
+            arecord_part.extend(['--period-size', str(period_size)])
         
         # Convert multi-channel to mono using sox
         # For ReSpeaker USB 4-Mic: channel_mode can be:
