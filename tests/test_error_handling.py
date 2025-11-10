@@ -49,7 +49,9 @@ class TestErrorHandling(unittest.TestCase):
                 'chunk_ms': 20,
                 'vad_mode': 2,
                 'vad_silence_ms': 800,
-                'mode': 'ptt'
+                'mode': 'ptt',
+                'buffer_size': 8192,
+                'period_size': 1024
             },
             'gpio': {
                 'button_pin': 17,

@@ -30,6 +30,8 @@ audio:
   vad_mode: 2                   # 0-3 (webrtcvad aggressiveness)
   vad_silence_ms: 800           # stop after this much silence
   mode: "ptt"                   # "ptt" (push-to-talk button) or "vad" (auto start on voice)
+  buffer_size: 8192             # ALSA buffer size in frames (prevents I/O errors on WM8960)
+  period_size: 1024             # ALSA period size in frames (balances latency and reliability)
 
 # GPIO
 gpio:
