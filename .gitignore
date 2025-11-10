@@ -1,5 +1,6 @@
 # Virtual environment
 venv/
+test_venv/
 
 # Python cache
 __pycache__/
