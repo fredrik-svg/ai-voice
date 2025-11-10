@@ -184,6 +184,28 @@ Agenten spelar upp via `aplay` på ALSA‑enheten i `config.yaml`.
 - Lås ACL så denna device endast kan publicera/lyssna på sina egna topics.
 
 ## Felsökning
+
+### "arecord failed to start (exit code -13)" eller behörighetsfel
+Detta är vanligtvis ett behörighetsproblem. Din användare har inte tillåtelse att komma åt ljudenheten.
+
+**Lösning:**
+```bash
+# Lägg till din användare i audio-gruppen
+sudo usermod -a -G audio $USER
+
+# Logga ut och logga in igen (eller starta om)
+# Verifiera att du är med i gruppen:
+groups
+# Du ska se "audio" i listan
+```
+
+**Alternativ lösning (tillfällig, för testning):**
+```bash
+# Ändra behörigheter på ljudenheterna (återställs vid omstart)
+sudo chmod a+rw /dev/snd/*
+```
+
+### Andra felsökningstips
 - Ingen ljudenhet? Kontrollera att I²S är på (`dtparam=i2s=on`) och att rätt WM8960‑overlay/drivrutin är installerad.
 - **Input/output error** vid inspelning? WM8960-kodeken kräver korrekt buffer- och periodstorlek. Kontrollera att `buffer_size: 8192` och `period_size: 1024` är satta i `config.yaml` (standardvärdena). Testa även med `arecord -D plughw:1,0 -c 2 -f S16_LE -r 16000 --buffer-size 8192 --period-size 1024 -d 3 test.wav`.
 - Hackigt ljud? Prova `plughw` istället för `hw`, sänk `vad_mode` till 1, eller öka `vad_silence_ms`.
