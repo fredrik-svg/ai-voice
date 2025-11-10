@@ -23,22 +23,29 @@ class AudioStreamer:
 
 
     def _arecord_cmd(self):
-        # WM8960 codec requires 2-channel (stereo) capture
-        # We record in stereo and convert to mono using sox
-        # to maintain compatibility with downstream mono processing
+        # Multi-channel audio capture with conversion to mono
+        # 
+        # Hardware configurations:
+        # - WM8960 (I2S HAT): 2-channel stereo capture
+        # - ReSpeaker USB 4-Mic Array: 6-channel capture
+        #   Channel 0: Processed audio (AEC, beamforming, noise suppression)
+        #   Channels 1-4: Raw audio from each microphone
+        #   Channel 5: Playback audio
         # 
         # Buffer and period sizes are set to prevent I/O errors:
-        # - Buffer size: 8192 frames (prevents buffer underruns)
-        # - Period size: 1024 frames (balances latency and reliability)
-        # These values are optimized for WM8960 at 16kHz stereo
+        # - Default for I2S: buffer 8192, period 1024
+        # - Default for USB: buffer 4096, period 512 (USB needs smaller buffers)
         buffer_size = self.cfg['audio'].get('buffer_size', 8192)
         period_size = self.cfg['audio'].get('period_size', 1024)
+        
+        # Get input channel count from config (default to 2 for backward compatibility)
+        input_channels = self.cfg['audio'].get('input_channels', 2)
         
         arecord_part = [
             'arecord',
             '-q',
             '-D', self.device,
-            '-c', '2',  # Record in stereo (hardware requirement)
+            '-c', str(input_channels),  # Record in specified channel count
             '-f', self.format,
             '-r', str(self.rate),
             '-t', 'raw',
@@ -46,19 +53,19 @@ class AudioStreamer:
             '--period-size', str(period_size)
         ]
         
-        # Convert stereo to mono using sox
-        # -t raw: raw PCM format
-        # -e signed-integer: signed integer samples
-        # -b 16: 16-bit samples
-        # -c 2: input is stereo
-        # -r rate: sample rate
-        # channels 1: output mono (averages the two channels)
+        # Convert multi-channel to mono using sox
+        # For ReSpeaker USB 4-Mic: channel_mode can be:
+        # - "processed": use channel 0 (already processed by DSP)
+        # - "beamformed": average channels 1-4 (raw mics)
+        # For stereo (2-channel): always averages both channels
+        channel_mode = self.cfg['audio'].get('channel_mode', 'processed')
+        
         sox_part = [
             'sox',
             '-t', 'raw',
             '-e', 'signed-integer',
             '-b', '16',
-            '-c', '2',
+            '-c', str(input_channels),
             '-r', str(self.rate),
             '-',  # read from stdin
             '-t', 'raw',
@@ -68,6 +75,17 @@ class AudioStreamer:
             '-r', str(self.rate),
             '-'  # write to stdout
         ]
+        
+        # Add channel remixing for specific modes
+        if input_channels == 6 and channel_mode == 'processed':
+            # Extract only channel 0 (processed audio) for ReSpeaker USB
+            sox_part.insert(-1, 'remix')
+            sox_part.insert(-1, '1')  # Select channel 1 (0-indexed becomes 1 in sox)
+        elif input_channels == 6 and channel_mode == 'beamformed':
+            # Average channels 1-4 (raw microphones) for custom beamforming
+            sox_part.insert(-1, 'remix')
+            sox_part.insert(-1, '2,3,4,5')  # Average channels 2-5 (mics 1-4 in 1-indexed)
+        # For 2-channel or other configs, sox will average all channels by default
         
         return arecord_part, sox_part
 

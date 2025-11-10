@@ -3,7 +3,9 @@
 Tests for audio capture functionality.
 
 These tests verify that the audio capture module correctly handles
-the stereo-to-mono conversion pipeline for WM8960 codec.
+multi-channel to mono conversion pipeline for both:
+- WM8960 codec (2-channel stereo)
+- ReSpeaker USB 4-Mic Array (6-channel)
 """
 
 import unittest
@@ -20,7 +22,7 @@ class TestAudioCapture(unittest.TestCase):
     """Test AudioStreamer configuration and command generation."""
 
     def setUp(self):
-        """Set up test configuration."""
+        """Set up test configuration for WM8960 (2-channel)."""
         self.test_config = {
             'audio': {
                 'rate': 16000,
@@ -32,7 +34,25 @@ class TestAudioCapture(unittest.TestCase):
                 'vad_silence_ms': 800,
                 'mode': 'ptt',
                 'buffer_size': 8192,
-                'period_size': 1024
+                'period_size': 1024,
+                'input_channels': 2
+            }
+        }
+        
+        self.usb_config = {
+            'audio': {
+                'rate': 16000,
+                'channels': 1,
+                'format': 'S16_LE',
+                'device': 'plughw:CARD=ArrayUAC10,DEV=0',
+                'chunk_ms': 20,
+                'vad_mode': 2,
+                'vad_silence_ms': 800,
+                'mode': 'vad',
+                'buffer_size': 4096,
+                'period_size': 512,
+                'input_channels': 6,
+                'channel_mode': 'processed'
             }
         }
 
@@ -60,7 +80,7 @@ class TestAudioCapture(unittest.TestCase):
         self.assertGreater(len(sox_cmd), 0)
 
     def test_arecord_cmd_stereo_capture(self):
-        """Test that arecord captures in stereo (2 channels)."""
+        """Test that arecord captures in stereo (2 channels) for WM8960."""
         streamer = AudioStreamer(self.test_config)
         arecord_cmd, sox_cmd = streamer._arecord_cmd()
         
@@ -72,6 +92,20 @@ class TestAudioCapture(unittest.TestCase):
         # Should be recording in stereo (2 channels) for WM8960 hardware
         self.assertEqual(channels, '2', 
                         "arecord should record in stereo (2 channels) for WM8960 codec")
+
+    def test_arecord_cmd_6channel_capture(self):
+        """Test that arecord captures in 6 channels for ReSpeaker USB."""
+        streamer = AudioStreamer(self.usb_config)
+        arecord_cmd, sox_cmd = streamer._arecord_cmd()
+        
+        # Find the -c flag in arecord command
+        self.assertIn('-c', arecord_cmd)
+        c_index = arecord_cmd.index('-c')
+        channels = arecord_cmd[c_index + 1]
+        
+        # Should be recording in 6 channels for ReSpeaker USB
+        self.assertEqual(channels, '6', 
+                        "arecord should record in 6 channels for ReSpeaker USB 4-Mic Array")
 
     def test_arecord_cmd_device(self):
         """Test that arecord uses the configured device."""
@@ -103,7 +137,7 @@ class TestAudioCapture(unittest.TestCase):
         self.assertEqual(rate, '16000')
 
     def test_sox_cmd_stereo_to_mono_conversion(self):
-        """Test that sox converts from stereo to mono."""
+        """Test that sox converts from stereo to mono for WM8960."""
         streamer = AudioStreamer(self.test_config)
         arecord_cmd, sox_cmd = streamer._arecord_cmd()
         
@@ -128,6 +162,59 @@ class TestAudioCapture(unittest.TestCase):
         # Output should be mono (1 channel)
         self.assertEqual(sox_cmd[output_c_index + 1], '1',
                         "sox output should be mono (1 channel)")
+    
+    def test_sox_cmd_6channel_to_mono_conversion(self):
+        """Test that sox converts from 6 channels to mono for ReSpeaker USB."""
+        streamer = AudioStreamer(self.usb_config)
+        arecord_cmd, sox_cmd = streamer._arecord_cmd()
+        
+        # Sox should specify input as 6 channels and output as 1 channel
+        input_c_index = None
+        output_c_index = None
+        for i, arg in enumerate(sox_cmd):
+            if arg == '-c':
+                if input_c_index is None:
+                    input_c_index = i
+                else:
+                    output_c_index = i
+        
+        self.assertIsNotNone(input_c_index, "sox should specify input channels")
+        self.assertIsNotNone(output_c_index, "sox should specify output channels")
+        
+        # Input should be 6 channels
+        self.assertEqual(sox_cmd[input_c_index + 1], '6',
+                        "sox input should be 6 channels for ReSpeaker USB")
+        
+        # Output should be mono (1 channel)
+        self.assertEqual(sox_cmd[output_c_index + 1], '1',
+                        "sox output should be mono (1 channel)")
+    
+    def test_sox_cmd_processed_mode_channel_selection(self):
+        """Test that sox extracts channel 0 (processed) in processed mode."""
+        streamer = AudioStreamer(self.usb_config)
+        arecord_cmd, sox_cmd = streamer._arecord_cmd()
+        
+        # Should have 'remix' and '1' to select channel 1 (0-indexed becomes 1 in sox)
+        self.assertIn('remix', sox_cmd)
+        remix_index = sox_cmd.index('remix')
+        self.assertEqual(sox_cmd[remix_index + 1], '1',
+                        "sox should select channel 1 (processed audio) in processed mode")
+    
+    def test_sox_cmd_beamformed_mode(self):
+        """Test that sox averages channels 1-4 in beamformed mode."""
+        # Create config with beamformed mode
+        beamformed_config = self.usb_config.copy()
+        beamformed_config['audio'] = self.usb_config['audio'].copy()
+        beamformed_config['audio']['channel_mode'] = 'beamformed'
+        
+        streamer = AudioStreamer(beamformed_config)
+        arecord_cmd, sox_cmd = streamer._arecord_cmd()
+        
+        # Should have 'remix' with channels 2,3,4,5 (raw mics in 1-indexed)
+        self.assertIn('remix', sox_cmd)
+        remix_index = sox_cmd.index('remix')
+        self.assertEqual(sox_cmd[remix_index + 1], '2,3,4,5',
+                        "sox should average channels 2-5 (raw mics) in beamformed mode")
 
     def test_sox_cmd_uses_stdin_stdout(self):
         """Test that sox reads from stdin and writes to stdout for piping."""
@@ -205,7 +292,9 @@ class TestAudioCapture(unittest.TestCase):
 if __name__ == '__main__':
     print("=" * 70)
     print("Audio Capture Test Suite")
-    print("Testing stereo-to-mono conversion pipeline for WM8960 codec")
+    print("Testing multi-channel to mono conversion pipeline for:")
+    print("  - WM8960 codec (2-channel stereo)")
+    print("  - ReSpeaker USB 4-Mic Array (6-channel)")
     print("=" * 70)
     print()
     
