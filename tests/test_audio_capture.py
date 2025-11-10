@@ -256,8 +256,8 @@ class TestAudioCapture(unittest.TestCase):
         self.assertEqual(period_size, '1024',
                         "arecord should use period-size of 1024 to balance latency and reliability")
 
-    def test_default_buffer_and_period_sizes(self):
-        """Test that buffer and period sizes have sensible defaults when not specified."""
+    def test_buffer_and_period_sizes_when_not_specified(self):
+        """Test that buffer and period sizes are NOT added when not specified in config."""
         # Create config without buffer/period settings
         config_without_buffer = {
             'audio': {
@@ -275,17 +275,46 @@ class TestAudioCapture(unittest.TestCase):
         streamer = AudioStreamer(config_without_buffer)
         arecord_cmd, sox_cmd = streamer._arecord_cmd()
         
-        # Should still have buffer and period sizes with defaults
-        self.assertIn('--buffer-size', arecord_cmd)
-        self.assertIn('--period-size', arecord_cmd)
+        # Should NOT have buffer and period sizes when not configured
+        self.assertNotIn('--buffer-size', arecord_cmd, 
+                        "Buffer size should not be added when not specified in config")
+        self.assertNotIn('--period-size', arecord_cmd,
+                        "Period size should not be added when not specified in config")
+    
+    def test_buffer_and_period_sizes_when_specified(self):
+        """Test that buffer and period sizes ARE added when explicitly specified in config."""
+        # Create config with explicit buffer/period settings
+        config_with_buffer = {
+            'audio': {
+                'rate': 16000,
+                'channels': 1,
+                'format': 'S16_LE',
+                'device': 'plughw:1,0',
+                'chunk_ms': 20,
+                'vad_mode': 2,
+                'vad_silence_ms': 800,
+                'mode': 'ptt',
+                'buffer_size': 4096,
+                'period_size': 512
+            }
+        }
+        
+        streamer = AudioStreamer(config_with_buffer)
+        arecord_cmd, sox_cmd = streamer._arecord_cmd()
+        
+        # Should have buffer and period sizes when configured
+        self.assertIn('--buffer-size', arecord_cmd, 
+                     "Buffer size should be added when specified in config")
+        self.assertIn('--period-size', arecord_cmd,
+                     "Period size should be added when specified in config")
         
         buffer_index = arecord_cmd.index('--buffer-size')
         buffer_size = arecord_cmd[buffer_index + 1]
-        self.assertEqual(buffer_size, '8192', "Default buffer size should be 8192")
+        self.assertEqual(buffer_size, '4096', "Buffer size should match config value")
         
         period_index = arecord_cmd.index('--period-size')
         period_size = arecord_cmd[period_index + 1]
-        self.assertEqual(period_size, '1024', "Default period size should be 1024")
+        self.assertEqual(period_size, '512', "Period size should match config value")
 
     def test_validate_device_returns_false_when_arecord_unavailable(self):
         """Test that validate_device returns False when arecord command is not found."""
