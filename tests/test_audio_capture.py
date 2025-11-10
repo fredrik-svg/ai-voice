@@ -15,7 +15,7 @@ import os
 # Add src directory to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from src.audio_capture import AudioStreamer
+from src.audio_capture import AudioStreamer, _is_user_in_audio_group_file, _is_user_in_audio_group_session
 
 
 class TestAudioCapture(unittest.TestCase):
@@ -315,6 +315,34 @@ class TestAudioCapture(unittest.TestCase):
         with patch('subprocess.run', return_value=mock_result):
             result = streamer.validate_device()
             self.assertFalse(result, "validate_device should return False when arecord -l fails")
+
+
+class TestAudioGroupHelpers(unittest.TestCase):
+    """Test audio group permission helper functions."""
+
+    def test_is_user_in_audio_group_file_returns_bool(self):
+        """Test that _is_user_in_audio_group_file returns a boolean."""
+        result = _is_user_in_audio_group_file()
+        self.assertIsInstance(result, bool)
+    
+    def test_is_user_in_audio_group_session_returns_bool(self):
+        """Test that _is_user_in_audio_group_session returns a boolean."""
+        result = _is_user_in_audio_group_session()
+        self.assertIsInstance(result, bool)
+    
+    def test_is_user_in_audio_group_file_handles_missing_file(self):
+        """Test that _is_user_in_audio_group_file handles missing /etc/group gracefully."""
+        from unittest.mock import patch
+        with patch('builtins.open', side_effect=FileNotFoundError):
+            result = _is_user_in_audio_group_file()
+            self.assertFalse(result)
+    
+    def test_is_user_in_audio_group_session_handles_missing_group(self):
+        """Test that _is_user_in_audio_group_session handles missing audio group gracefully."""
+        from unittest.mock import patch
+        with patch('grp.getgrnam', side_effect=KeyError):
+            result = _is_user_in_audio_group_session()
+            self.assertFalse(result)
 
 
 if __name__ == '__main__':
