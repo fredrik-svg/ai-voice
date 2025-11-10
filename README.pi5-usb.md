@@ -171,7 +171,10 @@ sudo systemctl start voice-agent
 sudo journalctl -u voice-agent -f
 ```
 
-**Tips:** Systemd-tjänsten använder automatiskt den virtuella miljön (`venv/bin/python3`) som skapades under installationen.
+**Tips:** 
+- Systemd-tjänsten använder automatiskt den virtuella miljön (`venv/bin/python3`) som skapades under installationen.
+- Om du installerade agenten i en annan katalog än `/home/pi/voice-agent`, redigera tjänstefilen och uppdatera `WorkingDirectory` och `ExecStart` vägarna.
+- På Raspberry Pi 5 kan du behöva uppdatera `User=pi` till ditt användarnamn om det är annorlunda.
 
 ## Backend: exempel på TTS-svar
 

@@ -21,6 +21,7 @@ Projektet stödjer flera Raspberry Pi-konfigurationer:
 - **Ljudkort:** USB Audio (UAC 1.0)
 - **Mikrofoner:** 6 kanaler (4 mics + processat ljud + playback)
 - **DSP:** Inbyggd AEC, beamforming, brusreducering
+- **Snabbstart:** [docs/QUICKSTART_PI5.md](docs/QUICKSTART_PI5.md) ⭐
 - **Dokumentation:** [README.pi5-usb.md](README.pi5-usb.md)
 - **Config:** `config.pi5-usb.example.yaml`
 - **Installation:** `scripts/install_deps_pi5.sh`
