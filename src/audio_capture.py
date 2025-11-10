@@ -168,10 +168,37 @@ class AudioStreamer:
                 print(f"[ERROR] arecord failed to start (exit code {arecord_poll})", file=sys.stderr)
                 if stderr_output:
                     print(f"[ERROR] arecord output: {stderr_output}", file=sys.stderr)
-                if "audio open error" in stderr_output.lower():
+                
+                # Check for specific error conditions
+                is_permission_error = False
+                stderr_lower = stderr_output.lower()
+                
+                # Detect permission-related errors
+                # Exit code -13 often indicates signal 13 (SIGPIPE) but can also indicate permission issues
+                # Common error messages for permission issues include:
+                # - "permission denied"
+                # - "audio open error" (often caused by lack of permissions)
+                # - "device or resource busy" (can indicate permission issues)
+                if (abs(arecord_poll) == 13 or 
+                    "permission denied" in stderr_lower or
+                    ("audio open error" in stderr_lower and "busy" not in stderr_lower)):
+                    is_permission_error = True
+                
+                if is_permission_error:
+                    print(f"[ERROR] Permission denied when accessing audio device '{self.device}'.", file=sys.stderr)
+                    print(f"[INFO] This usually means your user doesn't have permission to access audio devices.", file=sys.stderr)
+                    print(f"[INFO] To fix this, add your user to the 'audio' group:", file=sys.stderr)
+                    print(f"[INFO]   sudo usermod -a -G audio $USER", file=sys.stderr)
+                    print(f"[INFO]   Then log out and log back in for the changes to take effect.", file=sys.stderr)
+                    print(f"[INFO] You can verify group membership with: groups", file=sys.stderr)
+                elif "audio open error" in stderr_lower:
                     print(f"[ERROR] Failed to open audio device '{self.device}'.", file=sys.stderr)
                     print(f"[INFO] Please verify the device exists and is configured correctly in config.yaml.", file=sys.stderr)
                     print(f"[INFO] Run 'arecord -l' to list available capture devices.", file=sys.stderr)
+                    if "busy" in stderr_lower:
+                        print(f"[INFO] The device may be in use by another application.", file=sys.stderr)
+                        print(f"[INFO] Try closing other audio applications or use 'fuser -v /dev/snd/*' to find processes using audio.", file=sys.stderr)
+                
                 raise RuntimeError(f"Failed to start audio capture: {stderr_output}")
             
             # Check if sox failed

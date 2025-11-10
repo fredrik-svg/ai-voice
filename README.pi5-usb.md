@@ -201,7 +201,28 @@ lsusb | grep -i audio
 arecord -l
 ```
 
-### Fel vid inspelning
+### Fel vid inspelning: "arecord failed to start (exit code -13)"
+
+Detta är vanligtvis ett behörighetsproblem. Din användare har inte tillåtelse att komma åt ljudenheten.
+
+**Lösning:**
+```bash
+# Lägg till din användare i audio-gruppen
+sudo usermod -a -G audio $USER
+
+# Logga ut och logga in igen (eller starta om)
+# Verifiera att du är med i gruppen:
+groups
+# Du ska se "audio" i listan
+```
+
+**Alternativ lösning (tillfällig, för testning):**
+```bash
+# Ändra behörigheter på ljudenheterna (återställs vid omstart)
+sudo chmod a+rw /dev/snd/*
+```
+
+### Andra inspelningsfel
 Om du får "Input/output error":
 - Kontrollera buffer- och periodstorlekarna i config.yaml
 - USB-ljud använder typiskt mindre buffertar: `buffer_size: 4096`, `period_size: 512`
