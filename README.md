@@ -1,12 +1,38 @@
-# Raspberry Pi Zero 2 WH – Voice Agent (KEYESTUDIO ReSpeaker 2-Mic Pi HAT V1.0)
+# Raspberry Pi Voice Agent
 
 Lättviktig röstagent som:
-- spelar in 16 kHz mono via **WM8960** (I²S) på KEYESTUDIO ReSpeaker 2‑Mic Pi HAT **V1.0**,
-- VAD (WebRTC) + push-to-talk via **GPIO17**-knappen,
+- spelar in 16 kHz mono via ljudenhet (I²S HAT eller USB),
+- VAD (WebRTC) + push-to-talk via GPIO-knapp,
 - streamar PCM som base64‑chunks över **MQTT** till din backend/n8n,
 - spelar upp TTS‑svar (WAV base64) lokalt via `aplay`.
 
-> **Obs!** Detta projekt förutsätter **V1.0**-hatten (codec **WM8960**). Har du annan modell (t.ex. Seeed V2 med TLV320) behöver du rätt overlay/drivrutin för den.
+## Hårdvaruvarianter
+
+Projektet stödjer flera Raspberry Pi-konfigurationer:
+
+### Raspberry Pi Zero 2 WH + KEYESTUDIO ReSpeaker 2-Mic Pi HAT V1.0 (I²S)
+- **Ljudkort:** WM8960 (I²S)
+- **Mikrofoner:** 2 kanaler (stereo)
+- **Knapp:** GPIO17 (inbyggd på HAT)
+- **Dokumentation:** [README.md](README.md) (denna fil)
+- **Config:** `config.example.yaml`
+
+### Raspberry Pi 5 + ReSpeaker USB 4-Mic Array 📘
+- **Ljudkort:** USB Audio (UAC 1.0)
+- **Mikrofoner:** 6 kanaler (4 mics + processat ljud + playback)
+- **DSP:** Inbyggd AEC, beamforming, brusreducering
+- **Snabbstart:** [docs/QUICKSTART_PI5.md](docs/QUICKSTART_PI5.md) ⭐
+- **Dokumentation:** [README.pi5-usb.md](README.pi5-usb.md)
+- **Config:** `config.pi5-usb.example.yaml`
+- **Installation:** `scripts/install_deps_pi5.sh`
+
+> **Välj rätt variant:** Detta dokument beskriver konfigurationen för **Raspberry Pi Zero 2 WH med I²S HAT**. För **Raspberry Pi 5 med USB-array**, se [README.pi5-usb.md](README.pi5-usb.md).
+
+---
+
+## Raspberry Pi Zero 2 WH med KEYESTUDIO ReSpeaker 2-Mic Pi HAT V1.0
+
+> **Obs!** Detta avsnitt förutsätter **V1.0**-hatten (codec **WM8960**). Har du annan modell (t.ex. Seeed V2 med TLV320) behöver du rätt overlay/drivrutin för den.
 
 ## Topics (default)
 - Up: `t/<tenant>/u/<user>/voice/<deviceId>/audio` (QoS 0) – JSON med `pcm_b64` i 20 ms-ramar

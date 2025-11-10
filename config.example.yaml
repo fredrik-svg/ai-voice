@@ -1,3 +1,6 @@
+# Configuration for Raspberry Pi Zero 2 WH + KEYESTUDIO ReSpeaker 2-Mic Pi HAT V1.0
+# For Raspberry Pi 5 + ReSpeaker USB 4-Mic Array, use config.pi5-usb.example.yaml
+
 # Device identity
 tenant: GENIO
 user: fredrik
@@ -32,6 +35,7 @@ audio:
   mode: "ptt"                   # "ptt" (push-to-talk button) or "vad" (auto start on voice)
   buffer_size: 8192             # ALSA buffer size in frames (prevents I/O errors on WM8960)
   period_size: 1024             # ALSA period size in frames (balances latency and reliability)
+  input_channels: 2             # Hardware input channels (2 for WM8960 stereo)
 
 # GPIO
 gpio:

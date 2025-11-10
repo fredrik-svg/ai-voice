@@ -1,0 +1,55 @@
+# Device identity
+tenant: GENIO
+user: fredrik
+deviceId: voice-pi5-usb
+
+# MQTT broker (HiveMQ Cloud or other TLS MQTT broker)
+mqtt:
+  host: YOUR_HIVEMQ_CLOUD_HOST.hivemq.cloud  # e.g. abc123.s1.eu.hivemq.cloud for HiveMQ Cloud
+  port: 8883                    # TLS MQTT port
+  username: YOUR_MQTT_USER
+  password: YOUR_MQTT_PASSWORD
+  tls: true                     # set false for lab-only
+  clientIdPrefix: voice-
+
+topics:
+  audio: "t/{tenant}/u/{user}/voice/{deviceId}/audio"
+  control: "t/{tenant}/u/{user}/voice/{deviceId}/control"
+  response: "t/{tenant}/u/{user}/voice/{deviceId}/response"
+  tts: "t/{tenant}/u/{user}/voice/{deviceId}/tts"
+
+# Audio capture for ReSpeaker USB 4-Mic Array
+# The USB array has 6 channels total in default firmware:
+#   - Channel 0: Processed audio (AEC, beamforming, noise suppression)
+#   - Channels 1-4: Raw audio from each microphone
+#   - Channel 5: Playback audio
+# We capture all 6 channels and convert to mono using sox
+audio:
+  rate: 16000                   # 16 kHz (native for ReSpeaker USB)
+  channels: 1                   # Output format (mono). Hardware records in 6 channels, converted automatically.
+  format: S16_LE                # arecord format
+  device: "plughw:CARD=ArrayUAC10,DEV=0"  # ReSpeaker USB 4-Mic Array (use 'arecord -l' to find exact name)
+  chunk_ms: 20                  # 20ms frames
+  vad_mode: 2                   # 0-3 (webrtcvad aggressiveness)
+  vad_silence_ms: 800           # stop after this much silence
+  mode: "vad"                   # "ptt" (push-to-talk button) or "vad" (auto start on voice)
+  buffer_size: 4096             # ALSA buffer size in frames (USB audio typically needs smaller buffers)
+  period_size: 512              # ALSA period size in frames (balances latency and reliability for USB)
+  input_channels: 6             # Number of channels to capture from hardware (6 for ReSpeaker USB)
+  channel_mode: "processed"     # "processed" (use channel 0) or "beamformed" (average channels 1-4)
+
+# GPIO - Raspberry Pi 5 compatible
+# Note: ReSpeaker USB 4-Mic Array doesn't have a physical button
+# If using VAD mode, this section is not needed
+# If using PTT mode, connect an external button to a GPIO pin
+gpio:
+  button_pin: 17                # GPIO pin for push-to-talk button (if using PTT mode)
+  pull_up: true
+
+# Playback
+playback:
+  device: "plughw:CARD=ArrayUAC10,DEV=0"  # ReSpeaker USB 4-Mic Array 3.5mm output
+  volume_pct: 90
+
+# Logging
+debug: false
