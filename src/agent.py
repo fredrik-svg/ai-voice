@@ -149,8 +149,11 @@ class VoiceAgent:
                         self._start_session()
                         silence_ms = 0
                     if in_session:
-                        self._publish_frame(frame)
-                        silence_ms = 0 if is_speech else (silence_ms + self.cfg['audio']['chunk_ms'])
+                        if is_speech:
+                            self._publish_frame(frame)
+                            silence_ms = 0
+                        else:
+                            silence_ms += self.cfg['audio']['chunk_ms']
                         if silence_ms >= int(self.cfg['audio']['vad_silence_ms']):
                             self._end_session()
                             in_session = False
