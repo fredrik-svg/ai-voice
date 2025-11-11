@@ -1,6 +1,8 @@
-import ssl, json, threading
+import ssl, json, threading, logging
 from typing import Callable
 from paho.mqtt import client as mqtt
+
+logger = logging.getLogger(__name__)
 
 class MqttClient:
     def __init__(self, cfg):
@@ -17,11 +19,15 @@ class MqttClient:
     def _on_connect(self, client, userdata, flags, rc):
         if rc == 0:
             self._connected.set()
+            logger.debug("MQTT connection established")
         else:
             self._connected.clear()
+            logger.error(f"MQTT connection failed with code {rc}")
 
     def _on_disconnect(self, client, userdata, rc):
         self._connected.clear()
+        if rc != 0:
+            logger.warning(f"MQTT disconnected unexpectedly (rc={rc})")
 
     def connect(self):
         self.client.connect(self.cfg['mqtt']['host'], int(self.cfg['mqtt']['port']), keepalive=30)
@@ -32,9 +38,10 @@ class MqttClient:
         if on_message:
             self.client.message_callback_add(topic, lambda c, u, m: on_message(m))
         self.client.subscribe(topic, qos=qos)
+        logger.debug(f"Subscribed to: {topic}")
 
     def publish_json(self, topic, obj, qos=1, retain=False):
         import json
         payload = json.dumps(obj, ensure_ascii=False).encode('utf-8')
-        print(f"[MQTT] Publishing to topic: {topic}")
+        logger.debug(f"Publishing to {topic}: {len(payload)} bytes")
         self.client.publish(topic, payload, qos=qos, retain=retain)

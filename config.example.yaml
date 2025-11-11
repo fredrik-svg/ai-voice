@@ -48,4 +48,6 @@ playback:
   volume_pct: 90
 
 # Logging
+# debug: false - Shows only important events (connections, sessions, responses)
+# debug: true  - Shows all details including MQTT publishes and frame-by-frame audio
 debug: false
